@@ -31,9 +31,7 @@ defined( 'ABSPATH' ) || exit;
 
 class Access_Groups {
 
-	const OPTION_KEY            = 'access_groups';
-	const SCHEMA_VERSION_OPTION = 'access_groups_schema_version';
-	const SCHEMA_VERSION        = 2;
+	const OPTION_KEY = 'access_groups';
 
 	private static $instance;
 
@@ -55,7 +53,6 @@ class Access_Groups {
 	private function __construct() {
 		add_filter( 'user_has_cap', array( $this, 'filter_user_has_cap' ), 10, 4 );
 		add_action( 'deleted_user', array( $this, 'on_user_deleted' ) );
-		add_action( 'init', array( $this, 'maybe_migrate' ) );
 
 		if ( is_multisite() ) {
 			add_filter( 'get_blogs_of_user', array( $this, 'filter_get_blogs_of_user' ), 10, 3 );
@@ -625,127 +622,6 @@ class Access_Groups {
 		if ( $changed ) {
 			self::save_groups( $groups );
 		}
-	}
-
-	/* ------------------------------------------------------------------
-	 * Schema migrations
-	 * ---------------------------------------------------------------- */
-
-	/**
-	 * Runs once per schema bump.
-	 *
-	 *   v1: back-fill per-group marker rows from the primary array.
-	 *   v2: rename pre-0.2.0 keys (wp_user_groups / {prefix}user_groups /
-	 *       {prefix}user_group_{id}) to the access_groups naming.
-	 */
-	public function maybe_migrate() {
-		$current = (int) get_site_option( self::SCHEMA_VERSION_OPTION, 0 );
-		if ( $current >= self::SCHEMA_VERSION ) {
-			return;
-		}
-
-		// Pre-0.2.0 installs carried data under the old "user groups" naming.
-		// Pull that over before anything else reads via the new keys.
-		if ( $current < 2 ) {
-			self::migrate_legacy_user_groups_data();
-		}
-
-		// v1 (always run when version is behind): ensure marker index is
-		// in sync with the authoritative array.
-		self::rebuild_membership_index();
-
-		update_site_option( self::SCHEMA_VERSION_OPTION, self::SCHEMA_VERSION );
-	}
-
-	/**
-	 * Rebuild the per-group presence markers from the primary membership
-	 * array. Idempotent; exposed for tests and administrative repairs.
-	 */
-	public static function rebuild_membership_index() {
-		global $wpdb;
-
-		$primary = self::user_meta_key();
-		$rows    = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT user_id, meta_value FROM {$wpdb->usermeta} WHERE meta_key = %s",
-				$primary
-			)
-		);
-
-		foreach ( $rows as $row ) {
-			$user_id = (int) $row->user_id;
-			$ids     = maybe_unserialize( $row->meta_value );
-			if ( ! is_array( $ids ) ) {
-				continue;
-			}
-			foreach ( $ids as $id ) {
-				$id = (int) $id;
-				if ( $id > 0 ) {
-					update_user_meta( $user_id, self::group_meta_key( $id ), 1 );
-				}
-			}
-		}
-
-		self::invalidate_membership_caches();
-	}
-
-	/**
-	 * Copy data from the 0.1.0 "User Groups" names (`wp_user_groups` site
-	 * option, `{base_prefix}user_groups` / `{base_prefix}user_group_{id}`
-	 * usermeta) to the new `access_groups` names. Idempotent: the legacy
-	 * rows are deleted after being copied.
-	 */
-	private static function migrate_legacy_user_groups_data() {
-		global $wpdb;
-
-		// Site option.
-		$legacy_groups = get_site_option( 'wp_user_groups', null );
-		if ( is_array( $legacy_groups ) ) {
-			$existing = get_site_option( self::OPTION_KEY, array() );
-			if ( ! is_array( $existing ) || empty( $existing ) ) {
-				update_site_option( self::OPTION_KEY, $legacy_groups );
-			}
-			delete_site_option( 'wp_user_groups' );
-		}
-
-		// Primary membership array: rename meta_key in place.
-		$old_primary = $wpdb->base_prefix . 'user_groups';
-		$new_primary = self::user_meta_key();
-		if ( $old_primary !== $new_primary ) {
-			$wpdb->update(
-				$wpdb->usermeta,
-				array( 'meta_key' => $new_primary ),
-				array( 'meta_key' => $old_primary )
-			);
-		}
-
-		// Per-group markers: rename `{prefix}user_group_<n>` -> `{prefix}access_group_<n>`.
-		$old_marker_prefix = $wpdb->base_prefix . 'user_group_';
-		$new_marker_prefix = $wpdb->base_prefix . 'access_group_';
-		if ( $old_marker_prefix !== $new_marker_prefix ) {
-			$like = $wpdb->esc_like( $old_marker_prefix ) . '%';
-			$wpdb->query(
-				$wpdb->prepare(
-					"UPDATE {$wpdb->usermeta} SET meta_key = CONCAT(%s, SUBSTRING(meta_key, %d)) WHERE meta_key LIKE %s",
-					$new_marker_prefix,
-					strlen( $old_marker_prefix ) + 1,
-					$like
-				)
-			);
-		}
-
-		// Wipe the legacy version flag if it was set by the pre-rename plugin.
-		delete_site_option( 'wp_user_groups_index_version' );
-
-		// Drop any cached usermeta for affected users; the next read will
-		// repopulate from the freshly-renamed rows. wp_cache_flush_group
-		// landed in WP 6.1, so older installs fall through — the cache
-		// just misses and repopulates on the next read.
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( 'user_meta' );
-		}
-
-		self::$all_groups_cache = null;
 	}
 
 	/* ------------------------------------------------------------------

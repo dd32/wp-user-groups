@@ -117,16 +117,6 @@ if ( user_can( $user_id, 'edit_others_posts' ) ) {
 
 On multisite, group management is restricted to super admins so that a compromised single-site administrator can't grant themselves access across the network.
 
-## Upgrading from 0.1.x ("User Groups")
-
-This plugin was previously shipped as "User Groups" using the slug `wp-user-groups`. On first load, 0.2.0 transparently migrates:
-
-- the `wp_user_groups` site option → `access_groups`;
-- the `{base_prefix}user_groups` user meta → `{base_prefix}access_groups`;
-- the `{base_prefix}user_group_{id}` marker rows → `{base_prefix}access_group_{id}`.
-
-The migration runs once, is guarded by a schema-version site option, and preserves every membership and group definition.
-
 ## Development
 
 This repository is set up with [`@wordpress/env`](https://www.npmjs.com/package/@wordpress/env) for a local WordPress environment and PHPUnit for tests.

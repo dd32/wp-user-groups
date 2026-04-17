@@ -159,29 +159,4 @@ class Test_Membership extends WP_UnitTestCase {
 		$this->assertSame( '1', (string) get_user_meta( $this->user_id, Access_Groups::group_meta_key( $g2 ), true ) );
 	}
 
-	public function test_get_group_members_uses_marker_index() {
-		// Write the primary array directly without markers, simulating legacy data.
-		update_user_meta( $this->user_id, Access_Groups::user_meta_key(), array( $this->group_id ) );
-
-		// With no marker yet, the indexed lookup sees nobody.
-		$members = Access_Groups::get_group_members( $this->group_id );
-		$this->assertEmpty( $members );
-
-		// Rebuilding the index backfills the marker and the member appears.
-		Access_Groups::rebuild_membership_index();
-
-		$members = Access_Groups::get_group_members( $this->group_id );
-		$this->assertContains( $this->user_id, $members );
-	}
-
-	public function test_rebuild_is_idempotent() {
-		Access_Groups::add_user_to_group( $this->user_id, $this->group_id );
-
-		Access_Groups::rebuild_membership_index();
-		Access_Groups::rebuild_membership_index();
-
-		$members = Access_Groups::get_group_members( $this->group_id );
-		$this->assertCount( 1, $members );
-		$this->assertContains( $this->user_id, $members );
-	}
 }
