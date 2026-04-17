@@ -2,6 +2,15 @@
 /**
  * Core Access Groups logic.
  *
+ * A group is:
+ *
+ *   - a `default_role` (stored as `role` for brevity in the option) that
+ *     applies to every site the group is scoped to, and
+ *   - a `sites` map of `blog_id => role_override`. An empty map means
+ *     "every site on the network". An entry with an empty-string override
+ *     means "this site, use the default role". A non-empty override wins
+ *     over the default on that specific site.
+ *
  * Storage relies on WordPress primitives that are already network-wide and
  * object-cached:
  *
@@ -232,17 +241,29 @@ class Access_Groups {
 	 * ---------------------------------------------------------------- */
 
 	/**
-	 * Blog IDs that a group explicitly targets.
-	 * Empty array = "every site on the network, including future ones".
+	 * Sites the group applies to, keyed by blog ID, value = per-site role
+	 * override (empty string means "use the group's default role on this
+	 * site"). An empty map means "every site on the network, including
+	 * future ones, with the default role".
 	 *
-	 * @return int[]
+	 * @return array<int, string>
 	 */
 	public static function get_group_sites( $group_id ) {
 		$group = self::get_group( $group_id );
 		return $group ? $group['sites'] : array();
 	}
 
-	public static function set_group_sites( $group_id, array $blog_ids ) {
+	/**
+	 * Replace the site scope for a group.
+	 *
+	 * $sites may be passed either as:
+	 *   - int[]                       (blog IDs, all using the default role)
+	 *   - array<int, string>          (blog_id => role override; empty
+	 *                                  override means "use the default role")
+	 *
+	 * Pass an empty array to mean "all sites".
+	 */
+	public static function set_group_sites( $group_id, array $sites ) {
 		$group_id = (int) $group_id;
 		$groups   = self::get_all_groups();
 
@@ -250,9 +271,7 @@ class Access_Groups {
 			return false;
 		}
 
-		$groups[ $group_id ]['sites'] = array_values(
-			array_unique( array_filter( array_map( 'intval', $blog_ids ) ) )
-		);
+		$groups[ $group_id ]['sites'] = self::normalise_sites( $sites );
 
 		self::save_groups( $groups );
 		return true;
@@ -270,7 +289,37 @@ class Access_Groups {
 		if ( empty( $group['sites'] ) ) {
 			return true;
 		}
-		return in_array( $blog_id, $group['sites'], true );
+		return array_key_exists( $blog_id, $group['sites'] );
+	}
+
+	/**
+	 * Resolve the effective role a group grants on a given site. Returns
+	 * an empty string when the group doesn't apply to the site or when
+	 * neither the per-site override nor the default role is set.
+	 *
+	 * @param int|array $group   Group ID or group record.
+	 * @param int|null  $blog_id Defaults to the current blog.
+	 */
+	public static function effective_role( $group, $blog_id = null ) {
+		if ( is_numeric( $group ) ) {
+			$group = self::get_group( $group );
+		}
+		if ( ! is_array( $group ) ) {
+			return '';
+		}
+
+		$blog_id = $blog_id ? (int) $blog_id : (int) get_current_blog_id();
+
+		if ( empty( $group['sites'] ) ) {
+			return (string) $group['role'];
+		}
+
+		if ( ! array_key_exists( $blog_id, $group['sites'] ) ) {
+			return '';
+		}
+
+		$override = (string) $group['sites'][ $blog_id ];
+		return '' !== $override ? $override : (string) $group['role'];
 	}
 
 	/* ------------------------------------------------------------------
@@ -469,11 +518,13 @@ class Access_Groups {
 			if ( ! self::group_applies_to_site( $group_id, $blog_id ) ) {
 				continue;
 			}
-			if ( empty( $group['role'] ) ) {
+
+			$role_slug = self::effective_role( $group, $blog_id );
+			if ( '' === $role_slug ) {
 				continue;
 			}
 
-			$role = get_role( $group['role'] );
+			$role = get_role( $role_slug );
 			if ( ! $role ) {
 				continue;
 			}
@@ -483,7 +534,7 @@ class Access_Groups {
 					$caps[ $cap ] = true;
 				}
 			}
-			$caps[ 'role-' . $group['role'] ] = true;
+			$caps[ 'role-' . $role_slug ] = true;
 		}
 
 		return $caps;
@@ -526,15 +577,18 @@ class Access_Groups {
 		$has_all_sites_group = false;
 		$site_ids            = array();
 		foreach ( $user_groups as $group ) {
-			if ( empty( $group['role'] ) ) {
-				continue;
-			}
 			if ( empty( $group['sites'] ) ) {
-				$has_all_sites_group = true;
+				// All-sites scope — only useful if the default role is set.
+				if ( ! empty( $group['role'] ) ) {
+					$has_all_sites_group = true;
+				}
 				continue;
 			}
-			foreach ( $group['sites'] as $id ) {
-				$site_ids[ (int) $id ] = true;
+			foreach ( $group['sites'] as $id => $override ) {
+				$effective = '' !== (string) $override ? (string) $override : (string) $group['role'];
+				if ( '' !== $effective ) {
+					$site_ids[ (int) $id ] = true;
+				}
 			}
 		}
 
@@ -581,10 +635,10 @@ class Access_Groups {
 			return $is_member;
 		}
 		foreach ( self::get_user_groups( $user_id ) as $group_id => $group ) {
-			if ( empty( $group['role'] ) ) {
+			if ( ! self::group_applies_to_site( $group_id, $blog_id ) ) {
 				continue;
 			}
-			if ( self::group_applies_to_site( $group_id, $blog_id ) ) {
+			if ( '' !== self::effective_role( $group, $blog_id ) ) {
 				return true;
 			}
 		}
@@ -612,10 +666,9 @@ class Access_Groups {
 			if ( empty( $group['sites'] ) ) {
 				continue;
 			}
-			$filtered = array_values( array_diff( $group['sites'], array( $blog_id ) ) );
-			if ( count( $filtered ) !== count( $group['sites'] ) ) {
-				$groups[ $id ]['sites'] = $filtered;
-				$changed                = true;
+			if ( array_key_exists( $blog_id, $group['sites'] ) ) {
+				unset( $groups[ $id ]['sites'][ $blog_id ] );
+				$changed = true;
 			}
 		}
 
@@ -635,9 +688,40 @@ class Access_Groups {
 			'slug'  => isset( $group['slug'] ) ? sanitize_title( $group['slug'] ) : '',
 			'role'  => isset( $group['role'] ) ? sanitize_key( $group['role'] ) : '',
 			'sites' => isset( $group['sites'] ) && is_array( $group['sites'] )
-				? array_values( array_unique( array_filter( array_map( 'intval', $group['sites'] ) ) ) )
+				? self::normalise_sites( $group['sites'] )
 				: array(),
 		);
+	}
+
+	/**
+	 * Turn a caller-supplied sites array into the canonical
+	 * `blog_id => role_override` map. Accepts either an int[] of blog IDs
+	 * (all using the default role) or an associative map with role-slug
+	 * values; mixed input is fine. Invalid roles are dropped.
+	 *
+	 * @return array<int, string>
+	 */
+	private static function normalise_sites( array $sites ) {
+		$result = array();
+		foreach ( $sites as $key => $value ) {
+			if ( is_int( $key ) && ( is_int( $value ) || ctype_digit( (string) $value ) ) ) {
+				// `[ 3, 7, 9 ]` — bare list of blog IDs, no role overrides.
+				$blog_id = (int) $value;
+				$role    = '';
+			} else {
+				$blog_id = (int) $key;
+				$role    = is_string( $value ) ? sanitize_key( $value ) : '';
+			}
+
+			if ( $blog_id <= 0 ) {
+				continue;
+			}
+			if ( $role && ! wp_roles()->is_role( $role ) ) {
+				$role = '';
+			}
+			$result[ $blog_id ] = $role;
+		}
+		return $result;
 	}
 
 	private static function unique_slug( $slug, array $groups, $exclude_id = 0 ) {

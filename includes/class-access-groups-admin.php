@@ -275,22 +275,10 @@ class Access_Groups_Admin {
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="ag-role"><?php esc_html_e( 'Role granted', 'access-groups' ); ?></label></th>
+						<th scope="row"><label for="ag-role"><?php esc_html_e( 'Default role', 'access-groups' ); ?></label></th>
 						<td>
-							<select name="role" id="ag-role">
-								<option value=""><?php esc_html_e( '— No role —', 'access-groups' ); ?></option>
-								<?php
-								foreach ( wp_roles()->roles as $slug => $data ) {
-									printf(
-										'<option value="%s"%s>%s</option>',
-										esc_attr( $slug ),
-										selected( $slug, $current_role, false ),
-										esc_html( translate_user_role( $data['name'] ) )
-									);
-								}
-								?>
-							</select>
-							<p class="description"><?php esc_html_e( 'Members of this group effectively gain this role wherever the group applies.', 'access-groups' ); ?></p>
+							<?php echo self::role_select_html( 'role', 'ag-role', $current_role, __( '— No role —', 'access-groups' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+							<p class="description"><?php esc_html_e( 'Applied on every site the group reaches, unless a site below picks a different role.', 'access-groups' ); ?></p>
 						</td>
 					</tr>
 					<?php if ( is_multisite() ) : ?>
@@ -301,28 +289,40 @@ class Access_Groups_Admin {
 								<legend class="screen-reader-text"><?php esc_html_e( 'Sites where this group applies', 'access-groups' ); ?></legend>
 								<label>
 									<input type="radio" name="sites_scope" value="all" <?php checked( empty( $current_sites ) ); ?> />
-									<?php esc_html_e( 'All sites on the network (including sites added later)', 'access-groups' ); ?>
+									<?php esc_html_e( 'All sites on the network (default role everywhere, including sites added later)', 'access-groups' ); ?>
 								</label><br />
 								<label>
 									<input type="radio" name="sites_scope" value="selected" <?php checked( ! empty( $current_sites ) ); ?> />
-									<?php esc_html_e( 'Only the selected sites', 'access-groups' ); ?>
+									<?php esc_html_e( 'Only the selected sites (override the default role per site)', 'access-groups' ); ?>
 								</label>
-								<div style="margin-top:0.75em;max-height:260px;overflow:auto;border:1px solid #dcdcde;padding:0.5em 1em;background:#fff;">
+								<div style="margin-top:0.75em;max-height:320px;overflow:auto;border:1px solid #dcdcde;padding:0.5em 1em;background:#fff;">
 									<?php
 									$sites = get_sites( array( 'number' => 0 ) );
 									foreach ( $sites as $site ) {
-										$site_id = (int) $site->blog_id;
-										printf(
-											'<label style="display:block;"><input type="checkbox" name="sites[]" value="%1$d"%2$s /> <strong>%3$s</strong> <span style="color:#646970;">(%4$s)</span></label>',
-											$site_id,
-											checked( in_array( $site_id, $current_sites, true ), true, false ),
-											esc_html( $site->blogname ),
-											esc_html( untrailingslashit( $site->domain . $site->path ) )
-										);
+										$site_id       = (int) $site->blog_id;
+										$is_selected   = array_key_exists( $site_id, $current_sites );
+										$site_override = $is_selected ? (string) $current_sites[ $site_id ] : '';
+										?>
+										<div style="display:flex;align-items:center;gap:0.5em;padding:0.2em 0;">
+											<label style="flex:1;">
+												<input type="checkbox" name="sites[]" value="<?php echo $site_id; ?>" <?php checked( $is_selected ); ?> />
+												<strong><?php echo esc_html( $site->blogname ); ?></strong>
+												<span style="color:#646970;">(<?php echo esc_html( untrailingslashit( $site->domain . $site->path ) ); ?>)</span>
+											</label>
+											<?php
+											echo self::role_select_html( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+												'site_role[' . $site_id . ']',
+												'',
+												$site_override,
+												__( 'Use default role', 'access-groups' )
+											);
+											?>
+										</div>
+										<?php
 									}
 									?>
 								</div>
-								<p class="description"><?php esc_html_e( 'Pick "All sites" for a team that should reach the entire network without manual per-site setup. "Only the selected sites" requires at least one checked site.', 'access-groups' ); ?></p>
+								<p class="description"><?php esc_html_e( 'Pick "All sites" for a team that should reach the entire network with the default role. Switch to "Only the selected sites" to grant a different role per site (e.g. administrator on one site, editor on another).', 'access-groups' ); ?></p>
 							</fieldset>
 						</td>
 					</tr>
@@ -364,7 +364,17 @@ class Access_Groups_Admin {
 					);
 					return;
 				}
-				$sites = array_map( 'intval', wp_unslash( $_POST['sites'] ) );
+				$checked     = array_map( 'intval', wp_unslash( $_POST['sites'] ) );
+				$site_roles  = isset( $_POST['site_role'] ) && is_array( $_POST['site_role'] )
+					? wp_unslash( $_POST['site_role'] )
+					: array();
+				foreach ( $checked as $blog_id ) {
+					if ( $blog_id <= 0 ) {
+						continue;
+					}
+					$override          = isset( $site_roles[ $blog_id ] ) ? sanitize_key( $site_roles[ $blog_id ] ) : '';
+					$sites[ $blog_id ] = $override;
+				}
 			}
 		}
 
@@ -495,6 +505,29 @@ class Access_Groups_Admin {
 	/* ------------------------------------------------------------------
 	 * Helpers
 	 * ---------------------------------------------------------------- */
+
+	/**
+	 * Render a role-picker <select>. Caller interpolates the returned HTML
+	 * directly — the method escapes every value it emits.
+	 */
+	private static function role_select_html( $name, $id, $current, $empty_label ) {
+		$html  = sprintf(
+			'<select name="%s"%s>',
+			esc_attr( $name ),
+			$id ? ' id="' . esc_attr( $id ) . '"' : ''
+		);
+		$html .= '<option value="">' . esc_html( $empty_label ) . '</option>';
+		foreach ( wp_roles()->roles as $slug => $data ) {
+			$html .= sprintf(
+				'<option value="%s"%s>%s</option>',
+				esc_attr( $slug ),
+				selected( $slug, $current, false ),
+				esc_html( translate_user_role( $data['name'] ) )
+			);
+		}
+		$html .= '</select>';
+		return $html;
+	}
 
 	private function page_url( $args = array() ) {
 		$base = is_network_admin()

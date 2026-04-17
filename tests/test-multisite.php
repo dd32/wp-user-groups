@@ -49,8 +49,88 @@ class Test_Multisite extends WP_UnitTestCase {
 		Access_Groups::set_group_sites( $gid, array( $blog3 ) );
 
 		$sites = Access_Groups::get_group_sites( $gid );
-		$this->assertContains( $blog3, $sites );
-		$this->assertNotContains( $blog2, $sites );
+		$this->assertArrayHasKey( $blog3, $sites );
+		$this->assertArrayNotHasKey( $blog2, $sites );
+	}
+
+	public function test_bare_blog_id_list_means_default_role_everywhere_selected() {
+		$blog2 = self::factory()->blog->create();
+
+		$gid = Access_Groups::create_group( 'Bare', 'bare', 'editor' );
+		Access_Groups::set_group_sites( $gid, array( $blog2 ) );
+
+		$sites = Access_Groups::get_group_sites( $gid );
+		$this->assertSame( array( $blog2 => '' ), $sites );
+	}
+
+	/* ----- Per-site role overrides ----- */
+
+	public function test_per_site_role_override_beats_default() {
+		$blog2 = self::factory()->blog->create();
+		$blog3 = self::factory()->blog->create();
+
+		$gid = Access_Groups::create_group( 'Mixed', 'mixed', 'editor' );
+		Access_Groups::set_group_sites(
+			$gid,
+			array(
+				$blog2 => 'administrator',
+				$blog3 => '', // uses default (editor)
+			)
+		);
+
+		$group = Access_Groups::get_group( $gid );
+		$this->assertSame( 'administrator', Access_Groups::effective_role( $group, $blog2 ) );
+		$this->assertSame( 'editor',        Access_Groups::effective_role( $group, $blog3 ) );
+		$this->assertSame( '',              Access_Groups::effective_role( $group, get_main_site_id() ) );
+	}
+
+	public function test_per_site_role_override_grants_that_roles_caps() {
+		$blog2 = self::factory()->blog->create();
+		$blog3 = self::factory()->blog->create();
+
+		$gid = Access_Groups::create_group( 'Mixed', 'mixed-caps', 'editor' );
+		Access_Groups::set_group_sites(
+			$gid,
+			array(
+				$blog2 => 'administrator',
+				$blog3 => '',
+			)
+		);
+
+		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		Access_Groups::add_user_to_group( $uid, $gid );
+
+		$caps_blog2 = Access_Groups::get_capabilities_from_groups( $uid, $blog2 );
+		$caps_blog3 = Access_Groups::get_capabilities_from_groups( $uid, $blog3 );
+
+		$this->assertArrayHasKey( 'manage_options', $caps_blog2 );       // administrator-only
+		$this->assertArrayNotHasKey( 'manage_options', $caps_blog3 );    // editor doesn't have it
+		$this->assertArrayHasKey( 'edit_others_posts', $caps_blog3 );    // editor cap on blog3
+	}
+
+	public function test_no_default_and_no_override_grants_nothing() {
+		$blog2 = self::factory()->blog->create();
+
+		$gid = Access_Groups::create_group( 'Empty', 'empty', '' ); // no default role
+		Access_Groups::set_group_sites( $gid, array( $blog2 => '' ) );
+
+		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		Access_Groups::add_user_to_group( $uid, $gid );
+
+		$this->assertEmpty( Access_Groups::get_capabilities_from_groups( $uid, $blog2 ) );
+	}
+
+	public function test_override_works_even_with_empty_default_role() {
+		$blog2 = self::factory()->blog->create();
+
+		$gid = Access_Groups::create_group( 'Per-site only', 'pso', '' ); // no default
+		Access_Groups::set_group_sites( $gid, array( $blog2 => 'editor' ) );
+
+		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		Access_Groups::add_user_to_group( $uid, $gid );
+
+		$caps = Access_Groups::get_capabilities_from_groups( $uid, $blog2 );
+		$this->assertArrayHasKey( 'edit_others_posts', $caps );
 	}
 
 	/* ----- Capabilities scoped by site ----- */
@@ -129,7 +209,7 @@ class Test_Multisite extends WP_UnitTestCase {
 		Access_Groups::flush_all_caches();
 
 		$sites = Access_Groups::get_group_sites( $gid );
-		$this->assertNotContains( $blog2, $sites );
-		$this->assertContains( $blog3, $sites );
+		$this->assertArrayNotHasKey( $blog2, $sites );
+		$this->assertArrayHasKey( $blog3, $sites );
 	}
 }

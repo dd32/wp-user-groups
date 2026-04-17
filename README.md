@@ -10,20 +10,21 @@ WordPress already stacks **capabilities** inside **roles** inside **users**. Acc
 capabilities  ->  roles  ->  groups of users  ->  sites
 ```
 
-Create a group, pick a role, drop users in. Members get that role everywhere the group applies. Remove them and the access is gone on the next request — no stale `{prefix}capabilities` rows, no `switch_to_blog` juggling.
+Create a group, pick a default role, and decide which sites it reaches. Members get that role everywhere the group applies. An "Owners" group might be administrator on every site in the network, while an "Editorial Team" group might be editor on the blog, contributor on the docs site, and absent from the rest. Remove a user from the group and every one of those roles disappears on the next request — no stale `{prefix}capabilities` rows, no `switch_to_blog` juggling.
 
 ## Why
 
 WordPress roles and capabilities are per-site. On a large multisite network, granting a team access across 50 sites usually means adding each user to each site by hand — and remembering to remove them everywhere when they leave. Access Groups turns that into:
 
-1. Create a group, pick a role.
-2. Add the user to the group.
-3. They have that role on every site the group applies to.
-4. Remove them from the group → access is gone everywhere.
+1. Create a group, pick a default role.
+2. Decide where it reaches: all sites, or a curated list (each with its own role if you want).
+3. Add the user to the group.
+4. They have the right role on every site the group applies to.
+5. Remove them from the group → access is gone everywhere.
 
 ## Features
 
-- **Groups with roles.** Each group is associated with a WordPress role (editor, administrator, a custom role, or nothing).
+- **Default role with per-site overrides.** Every group has a default role that applies wherever the group reaches. On multisite, any individual site can override that role — administrator on one site, editor on another, contributor on a third — all from a single group definition.
 - **Runtime capability grants.** Access is granted through the `user_has_cap` filter, so removing a user from a group drops their access on the next request — no stale `{prefix}capabilities` usermeta to clean up.
 - **Multisite-native.** Group definitions live in a single network-level site option; memberships live in `wp_usermeta`, which is global on multisite. No `switch_to_blog` juggling.
 - **Site scoping.** A group can apply to every site on the network (including sites added later) or a curated list of sites.
@@ -36,7 +37,7 @@ Three WordPress primitives, all served by the object cache or metadata cache:
 
 | Storage | Purpose |
 |---|---|
-| `access_groups` site option | Map of group ID → `{ id, name, slug, role, sites }`. `get_site_option()` is per-network on multisite, per-install on single site. |
+| `access_groups` site option | Map of group ID → `{ id, name, slug, role, sites }`. `role` is the default. `sites` is a map of `blog_id → role_override` (empty override means "use the default on this site"); an empty map means "all sites, default role". `get_site_option()` is per-network on multisite, per-install on single site. |
 | `{base_prefix}access_groups` user meta | Array of group IDs the user belongs to (authoritative). `wp_usermeta` is global on multisite, so a user's memberships follow them across sites. |
 | `{base_prefix}access_group_{id}` user meta | Presence marker, one row per (user, group). Gives "who is in group N?" an indexed `meta_key` lookup with no `LIKE` and no PHP-side filtering. |
 
@@ -70,8 +71,10 @@ No schema changes are required. Group definitions live in a site option and memb
 
 - **Name** — display name, e.g. "WordPress Meta Team".
 - **Slug** — optional; auto-generated if blank.
-- **Role granted** — any registered WordPress role. Leaving it blank means the group tracks membership but grants no extra capabilities.
-- **Sites** (multisite only) — *All sites* or a specific list.
+- **Default role** — any registered WordPress role. Applied on every site the group reaches, unless a site below overrides it. Leaving it blank means the group only grants a role where a per-site override is set.
+- **Sites** (multisite only):
+  - *All sites* — the default role applies everywhere on the network, including sites added later.
+  - *Only the selected sites* — check the sites the group reaches. For each checked site, pick a role in the dropdown next to it, or leave it at "Use default role".
 
 ### Adding users to groups
 
@@ -80,11 +83,26 @@ Edit a user's profile. The **Access Groups** section lists every defined group w
 ### Programmatic API
 
 ```php
-// Create a group.
+// Create a group with a default role.
 $id = Access_Groups::create_group( 'Meta Team', 'meta-team', 'editor' );
 
-// Scope it to specific sites on multisite (empty array = all sites).
+// Scope it to specific sites.
+// Simple form: bare list of blog IDs (all use the default role).
 Access_Groups::set_group_sites( $id, array( 1, 4, 9 ) );
+
+// Per-site role overrides — administrator on site 1, editor (the default)
+// on site 4, contributor on site 9. Empty string = "use default role".
+Access_Groups::set_group_sites( $id, array(
+    1 => 'administrator',
+    4 => '',
+    9 => 'contributor',
+) );
+
+// Empty array = applies to every site on the network with the default role.
+Access_Groups::set_group_sites( $id, array() );
+
+// Resolve the effective role a group grants on a given site.
+Access_Groups::effective_role( $group_or_id, $blog_id );
 
 // Add / remove members.
 Access_Groups::add_user_to_group( $user_id, $id );
@@ -94,6 +112,7 @@ Access_Groups::set_user_groups( $user_id, array( $id, $other_id ) );
 // Inspect.
 Access_Groups::get_user_groups( $user_id );        // full group records, keyed by ID
 Access_Groups::get_user_group_ids( $user_id );     // just the IDs
+Access_Groups::get_group_sites( $id );             // blog_id => role_override map
 Access_Groups::get_group_members( $id );           // user IDs in this group
 Access_Groups::count_members_per_group();          // [ group_id => count ]
 ```
