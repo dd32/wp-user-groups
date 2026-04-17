@@ -1,0 +1,44 @@
+name: Tests
+
+on:
+  push:
+    branches: [trunk]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.2']
+    env:
+      WP_ENV_PHP_VERSION: ${{ matrix.php }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Start WordPress environment
+        run: npm run start
+
+      - name: Run tests (single-site)
+        run: npm run test
+
+      - name: Run tests (multisite)
+        run: npm run test:multisite
+
+      - name: Stop WordPress environment
+        if: always()
+        run: npm run stop
