@@ -18,7 +18,7 @@ if ( ! file_exists( $_tests_dir . '/includes/functions.php' ) ) {
 require_once $_tests_dir . '/includes/functions.php';
 
 tests_add_filter( 'muplugins_loaded', function () {
-	require dirname( __DIR__ ) . '/wp-user-groups.php';
+	require dirname( __DIR__ ) . '/access-groups.php';
 } );
 
 require $_tests_dir . '/includes/bootstrap.php';

@@ -9,9 +9,9 @@ class Test_Capabilities extends WP_UnitTestCase {
 
 	public function set_up() {
 		parent::set_up();
-		WP_User_Groups::flush_all_caches();
+		Access_Groups::flush_all_caches();
 
-		$this->group_id = WP_User_Groups::create_group( 'Editors', 'editors', 'editor' );
+		$this->group_id = Access_Groups::create_group( 'Editors', 'editors', 'editor' );
 		$this->user_id  = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 	}
 
@@ -21,7 +21,7 @@ class Test_Capabilities extends WP_UnitTestCase {
 	}
 
 	public function test_group_grants_role_capabilities() {
-		WP_User_Groups::add_user_to_group( $this->user_id, $this->group_id );
+		Access_Groups::add_user_to_group( $this->user_id, $this->group_id );
 
 		$user = new WP_User( $this->user_id );
 		$this->assertTrue( $user->has_cap( 'edit_posts' ) );
@@ -30,8 +30,8 @@ class Test_Capabilities extends WP_UnitTestCase {
 	}
 
 	public function test_removing_from_group_drops_caps() {
-		WP_User_Groups::add_user_to_group( $this->user_id, $this->group_id );
-		WP_User_Groups::remove_user_from_group( $this->user_id, $this->group_id );
+		Access_Groups::add_user_to_group( $this->user_id, $this->group_id );
+		Access_Groups::remove_user_from_group( $this->user_id, $this->group_id );
 
 		$user = new WP_User( $this->user_id );
 		$this->assertFalse( $user->has_cap( 'edit_others_posts' ) );
@@ -39,9 +39,9 @@ class Test_Capabilities extends WP_UnitTestCase {
 
 	public function test_user_retains_own_caps_alongside_group() {
 		$user_id = self::factory()->user->create( array( 'role' => 'author' ) );
-		$admin_group = WP_User_Groups::create_group( 'Admins', 'admins', 'administrator' );
+		$admin_group = Access_Groups::create_group( 'Admins', 'admins', 'administrator' );
 
-		WP_User_Groups::add_user_to_group( $user_id, $admin_group );
+		Access_Groups::add_user_to_group( $user_id, $admin_group );
 
 		$user = new WP_User( $user_id );
 		$this->assertTrue( $user->has_cap( 'manage_options' ) ); // from admin group
@@ -49,10 +49,10 @@ class Test_Capabilities extends WP_UnitTestCase {
 	}
 
 	public function test_multiple_groups_merge_caps() {
-		$author_group = WP_User_Groups::create_group( 'Authors', 'authors', 'author' );
+		$author_group = Access_Groups::create_group( 'Authors', 'authors', 'author' );
 
-		WP_User_Groups::add_user_to_group( $this->user_id, $this->group_id );  // editor
-		WP_User_Groups::add_user_to_group( $this->user_id, $author_group );
+		Access_Groups::add_user_to_group( $this->user_id, $this->group_id );  // editor
+		Access_Groups::add_user_to_group( $this->user_id, $author_group );
 
 		$user = new WP_User( $this->user_id );
 		$this->assertTrue( $user->has_cap( 'edit_others_posts' ) ); // editor cap
@@ -60,28 +60,28 @@ class Test_Capabilities extends WP_UnitTestCase {
 	}
 
 	public function test_group_without_role_grants_nothing() {
-		$empty = WP_User_Groups::create_group( 'No Role', 'no-role', '' );
-		WP_User_Groups::add_user_to_group( $this->user_id, $empty );
+		$empty = Access_Groups::create_group( 'No Role', 'no-role', '' );
+		Access_Groups::add_user_to_group( $this->user_id, $empty );
 
 		$user = new WP_User( $this->user_id );
 		$this->assertFalse( $user->has_cap( 'edit_posts' ) );
 	}
 
 	public function test_deleting_group_drops_caps() {
-		WP_User_Groups::add_user_to_group( $this->user_id, $this->group_id );
-		WP_User_Groups::delete_group( $this->group_id );
+		Access_Groups::add_user_to_group( $this->user_id, $this->group_id );
+		Access_Groups::delete_group( $this->group_id );
 
 		$user = new WP_User( $this->user_id );
 		$this->assertFalse( $user->has_cap( 'edit_others_posts' ) );
 	}
 
 	public function test_changing_group_role_changes_caps() {
-		WP_User_Groups::add_user_to_group( $this->user_id, $this->group_id );
+		Access_Groups::add_user_to_group( $this->user_id, $this->group_id );
 
 		$user = new WP_User( $this->user_id );
 		$this->assertTrue( $user->has_cap( 'edit_others_posts' ) );
 
-		WP_User_Groups::update_group( $this->group_id, array( 'role' => 'subscriber' ) );
+		Access_Groups::update_group( $this->group_id, array( 'role' => 'subscriber' ) );
 
 		$user = new WP_User( $this->user_id );
 		$this->assertFalse( $user->has_cap( 'edit_others_posts' ) );

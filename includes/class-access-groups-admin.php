@@ -1,18 +1,19 @@
 <?php
 /**
- * Admin UI for User Groups.
+ * Admin UI for Access Groups.
  *
- * - Groups management page (Users → Groups on single site; Network Admin → Users → Groups on multisite).
+ * - Groups management page (Users → Access Groups on single site; Network
+ *   Admin → Users → Access Groups on multisite).
  * - User-edit profile section with group membership checkboxes.
  * - "Groups" column on the Users list table.
  */
 
 defined( 'ABSPATH' ) || exit;
 
-class WP_User_Groups_Admin {
+class Access_Groups_Admin {
 
-	const PAGE_SLUG  = 'user-groups';
-	const USER_NONCE = 'wp_user_groups_user';
+	const PAGE_SLUG  = 'access-groups';
+	const USER_NONCE = 'access_groups_user';
 
 	private static $instance;
 
@@ -30,8 +31,8 @@ class WP_User_Groups_Admin {
 			add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		}
 
-		add_action( 'admin_post_wp_user_groups_save', array( $this, 'handle_save' ) );
-		add_action( 'admin_post_wp_user_groups_delete', array( $this, 'handle_delete' ) );
+		add_action( 'admin_post_access_groups_save', array( $this, 'handle_save' ) );
+		add_action( 'admin_post_access_groups_delete', array( $this, 'handle_delete' ) );
 
 		add_action( 'show_user_profile', array( $this, 'render_user_field' ) );
 		add_action( 'edit_user_profile', array( $this, 'render_user_field' ) );
@@ -63,11 +64,11 @@ class WP_User_Groups_Admin {
 
 	private static function save_nonce_action( $group_id ) {
 		$group_id = (int) $group_id;
-		return 'wp_user_groups_save_' . ( $group_id ? $group_id : 'new' );
+		return 'access_groups_save_' . ( $group_id ? $group_id : 'new' );
 	}
 
 	private static function delete_nonce_action( $group_id ) {
-		return 'wp_user_groups_delete_' . (int) $group_id;
+		return 'access_groups_delete_' . (int) $group_id;
 	}
 
 	/* ------------------------------------------------------------------
@@ -76,8 +77,8 @@ class WP_User_Groups_Admin {
 
 	public function register_menu() {
 		add_users_page(
-			__( 'User Groups', 'wp-user-groups' ),
-			__( 'Groups', 'wp-user-groups' ),
+			__( 'Access Groups', 'access-groups' ),
+			__( 'Access Groups', 'access-groups' ),
 			self::required_cap(),
 			self::PAGE_SLUG,
 			array( $this, 'render_page' )
@@ -87,8 +88,8 @@ class WP_User_Groups_Admin {
 	public function register_network_menu() {
 		add_submenu_page(
 			'users.php',
-			__( 'User Groups', 'wp-user-groups' ),
-			__( 'Groups', 'wp-user-groups' ),
+			__( 'Access Groups', 'access-groups' ),
+			__( 'Access Groups', 'access-groups' ),
 			self::required_cap(),
 			self::PAGE_SLUG,
 			array( $this, 'render_page' )
@@ -101,7 +102,7 @@ class WP_User_Groups_Admin {
 
 	public function render_page() {
 		if ( ! $this->current_user_can_manage() ) {
-			wp_die( esc_html__( 'You do not have permission to access this page.', 'wp-user-groups' ) );
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'access-groups' ) );
 		}
 
 		$action = isset( $_GET['action'] ) ? sanitize_key( wp_unslash( $_GET['action'] ) ) : 'list';
@@ -122,35 +123,35 @@ class WP_User_Groups_Admin {
 	 * ---------------------------------------------------------------- */
 
 	private function render_list() {
-		$groups  = WP_User_Groups::get_all_groups();
-		$counts  = WP_User_Groups::count_members_per_group();
-		$new_url = $this->page_url( array( 'action' => 'new' ) );
+		$groups   = Access_Groups::get_all_groups();
+		$counts   = Access_Groups::count_members_per_group();
+		$new_url  = $this->page_url( array( 'action' => 'new' ) );
 		$post_url = admin_url( 'admin-post.php' );
 		?>
 		<div class="wrap">
-			<h1 class="wp-heading-inline"><?php esc_html_e( 'User Groups', 'wp-user-groups' ); ?></h1>
-			<a href="<?php echo esc_url( $new_url ); ?>" class="page-title-action"><?php esc_html_e( 'Add New', 'wp-user-groups' ); ?></a>
+			<h1 class="wp-heading-inline"><?php esc_html_e( 'Access Groups', 'access-groups' ); ?></h1>
+			<a href="<?php echo esc_url( $new_url ); ?>" class="page-title-action"><?php esc_html_e( 'Add New', 'access-groups' ); ?></a>
 			<hr class="wp-header-end">
 
 			<?php $this->render_admin_notices(); ?>
 
 			<p class="description">
-				<?php esc_html_e( "Create groups that grant a WordPress role to every member. Users gain the group's role in addition to any role they already hold. Remove a user from a group and the access disappears immediately.", 'wp-user-groups' ); ?>
+				<?php esc_html_e( "Create groups that grant a WordPress role to every member. Users gain the group's role in addition to any role they already hold. Remove a user from a group and the access disappears immediately.", 'access-groups' ); ?>
 			</p>
 
 			<?php if ( empty( $groups ) ) : ?>
-				<p><em><?php esc_html_e( 'No groups yet. Create one to start organising user access.', 'wp-user-groups' ); ?></em></p>
+				<p><em><?php esc_html_e( 'No groups yet. Create one to start organising user access.', 'access-groups' ); ?></em></p>
 			<?php else : ?>
 			<table class="wp-list-table widefat fixed striped">
 				<thead>
 					<tr>
-						<th scope="col"><?php esc_html_e( 'Name', 'wp-user-groups' ); ?></th>
-						<th scope="col"><?php esc_html_e( 'Slug', 'wp-user-groups' ); ?></th>
-						<th scope="col"><?php esc_html_e( 'Role', 'wp-user-groups' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Name', 'access-groups' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Slug', 'access-groups' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Role', 'access-groups' ); ?></th>
 						<?php if ( is_multisite() ) : ?>
-							<th scope="col"><?php esc_html_e( 'Sites', 'wp-user-groups' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Sites', 'access-groups' ); ?></th>
 						<?php endif; ?>
-						<th scope="col"><?php esc_html_e( 'Members', 'wp-user-groups' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Members', 'access-groups' ); ?></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -158,11 +159,11 @@ class WP_User_Groups_Admin {
 				$role_names = wp_roles()->get_names();
 				foreach ( $groups as $group ) :
 					$edit_url     = $this->page_url( array( 'action' => 'edit', 'group_id' => $group['id'] ) );
-					$sites        = is_multisite() ? WP_User_Groups::get_group_sites( $group['id'] ) : array();
+					$sites        = is_multisite() ? Access_Groups::get_group_sites( $group['id'] ) : array();
 					$member_count = isset( $counts[ $group['id'] ] ) ? $counts[ $group['id'] ] : 0;
 					$confirm_msg  = sprintf(
 						/* translators: %s: group name */
-						__( 'Delete the "%s" group? Members will lose the role it grants.', 'wp-user-groups' ),
+						__( 'Delete the "%s" group? Members will lose the role it grants.', 'access-groups' ),
 						$group['name']
 					);
 				?>
@@ -170,14 +171,14 @@ class WP_User_Groups_Admin {
 						<td>
 							<strong><a href="<?php echo esc_url( $edit_url ); ?>"><?php echo esc_html( $group['name'] ); ?></a></strong>
 							<div class="row-actions">
-								<span class="edit"><a href="<?php echo esc_url( $edit_url ); ?>"><?php esc_html_e( 'Edit', 'wp-user-groups' ); ?></a> | </span>
+								<span class="edit"><a href="<?php echo esc_url( $edit_url ); ?>"><?php esc_html_e( 'Edit', 'access-groups' ); ?></a> | </span>
 								<span class="delete">
 									<form method="post" action="<?php echo esc_url( $post_url ); ?>" style="display:inline;" onsubmit="return confirm('<?php echo esc_js( $confirm_msg ); ?>');">
-										<input type="hidden" name="action" value="wp_user_groups_delete" />
+										<input type="hidden" name="action" value="access_groups_delete" />
 										<input type="hidden" name="group_id" value="<?php echo (int) $group['id']; ?>" />
 										<input type="hidden" name="network_wide" value="<?php echo is_network_admin() ? '1' : '0'; ?>" />
 										<?php wp_nonce_field( self::delete_nonce_action( $group['id'] ) ); ?>
-										<button type="submit" class="button-link submitdelete"><?php esc_html_e( 'Delete', 'wp-user-groups' ); ?></button>
+										<button type="submit" class="button-link submitdelete"><?php esc_html_e( 'Delete', 'access-groups' ); ?></button>
 									</form>
 								</span>
 							</div>
@@ -189,7 +190,7 @@ class WP_User_Groups_Admin {
 								echo esc_html( translate_user_role( $role_names[ $group['role'] ] ) );
 							} elseif ( $group['role'] ) {
 								/* translators: %s: role slug */
-								printf( '<em>%s</em>', esc_html( sprintf( __( 'Unknown role: %s', 'wp-user-groups' ), $group['role'] ) ) );
+								printf( '<em>%s</em>', esc_html( sprintf( __( 'Unknown role: %s', 'access-groups' ), $group['role'] ) ) );
 							} else {
 								echo '&mdash;';
 							}
@@ -199,10 +200,10 @@ class WP_User_Groups_Admin {
 							<td>
 								<?php
 								if ( empty( $sites ) ) {
-									esc_html_e( 'All sites', 'wp-user-groups' );
+									esc_html_e( 'All sites', 'access-groups' );
 								} else {
 									/* translators: %s: number of sites */
-									echo esc_html( sprintf( _n( '%s site', '%s sites', count( $sites ), 'wp-user-groups' ), number_format_i18n( count( $sites ) ) ) );
+									echo esc_html( sprintf( _n( '%s site', '%s sites', count( $sites ), 'access-groups' ), number_format_i18n( count( $sites ) ) ) );
 								}
 								?>
 							</td>
@@ -226,16 +227,16 @@ class WP_User_Groups_Admin {
 		$group    = null;
 
 		if ( 'edit' === $action ) {
-			$group = WP_User_Groups::get_group( $group_id );
+			$group = Access_Groups::get_group( $group_id );
 			if ( ! $group ) {
-				wp_die( esc_html__( 'Group not found.', 'wp-user-groups' ) );
+				wp_die( esc_html__( 'Group not found.', 'access-groups' ) );
 			}
 		} else {
 			$group_id = 0;
 		}
 
 		$current_role  = $group ? $group['role'] : '';
-		$current_sites = ( $group && is_multisite() ) ? WP_User_Groups::get_group_sites( $group['id'] ) : array();
+		$current_sites = ( $group && is_multisite() ) ? Access_Groups::get_group_sites( $group['id'] ) : array();
 		$back_url      = $this->page_url();
 		?>
 		<div class="wrap">
@@ -244,8 +245,8 @@ class WP_User_Groups_Admin {
 				echo esc_html(
 					$group
 						/* translators: %s: group name */
-						? sprintf( __( 'Edit Group: %s', 'wp-user-groups' ), $group['name'] )
-						: __( 'Add New Group', 'wp-user-groups' )
+						? sprintf( __( 'Edit Access Group: %s', 'access-groups' ), $group['name'] )
+						: __( 'Add New Access Group', 'access-groups' )
 				);
 				?>
 			</h1>
@@ -253,31 +254,31 @@ class WP_User_Groups_Admin {
 			<?php $this->render_admin_notices(); ?>
 
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<input type="hidden" name="action" value="wp_user_groups_save" />
+				<input type="hidden" name="action" value="access_groups_save" />
 				<input type="hidden" name="network_wide" value="<?php echo is_network_admin() ? '1' : '0'; ?>" />
 				<input type="hidden" name="group_id" value="<?php echo (int) $group_id; ?>" />
 				<?php wp_nonce_field( self::save_nonce_action( $group_id ) ); ?>
 
 				<table class="form-table" role="presentation">
 					<tr>
-						<th scope="row"><label for="wpug-name"><?php esc_html_e( 'Name', 'wp-user-groups' ); ?></label></th>
+						<th scope="row"><label for="ag-name"><?php esc_html_e( 'Name', 'access-groups' ); ?></label></th>
 						<td>
-							<input name="name" type="text" id="wpug-name" value="<?php echo esc_attr( $group ? $group['name'] : '' ); ?>" class="regular-text" required />
-							<p class="description"><?php esc_html_e( 'Display name, e.g. "WordPress Meta Team".', 'wp-user-groups' ); ?></p>
+							<input name="name" type="text" id="ag-name" value="<?php echo esc_attr( $group ? $group['name'] : '' ); ?>" class="regular-text" required />
+							<p class="description"><?php esc_html_e( 'Display name, e.g. "WordPress Meta Team".', 'access-groups' ); ?></p>
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="wpug-slug"><?php esc_html_e( 'Slug', 'wp-user-groups' ); ?></label></th>
+						<th scope="row"><label for="ag-slug"><?php esc_html_e( 'Slug', 'access-groups' ); ?></label></th>
 						<td>
-							<input name="slug" type="text" id="wpug-slug" value="<?php echo esc_attr( $group ? $group['slug'] : '' ); ?>" class="regular-text" />
-							<p class="description"><?php esc_html_e( 'Optional. Auto-generated from the name if left blank. Duplicates get a numeric suffix.', 'wp-user-groups' ); ?></p>
+							<input name="slug" type="text" id="ag-slug" value="<?php echo esc_attr( $group ? $group['slug'] : '' ); ?>" class="regular-text" />
+							<p class="description"><?php esc_html_e( 'Optional. Auto-generated from the name if left blank. Duplicates get a numeric suffix.', 'access-groups' ); ?></p>
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="wpug-role"><?php esc_html_e( 'Role granted', 'wp-user-groups' ); ?></label></th>
+						<th scope="row"><label for="ag-role"><?php esc_html_e( 'Role granted', 'access-groups' ); ?></label></th>
 						<td>
-							<select name="role" id="wpug-role">
-								<option value=""><?php esc_html_e( '— No role —', 'wp-user-groups' ); ?></option>
+							<select name="role" id="ag-role">
+								<option value=""><?php esc_html_e( '— No role —', 'access-groups' ); ?></option>
 								<?php
 								foreach ( wp_roles()->roles as $slug => $data ) {
 									printf(
@@ -289,22 +290,22 @@ class WP_User_Groups_Admin {
 								}
 								?>
 							</select>
-							<p class="description"><?php esc_html_e( 'Members of this group effectively gain this role wherever the group applies.', 'wp-user-groups' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Members of this group effectively gain this role wherever the group applies.', 'access-groups' ); ?></p>
 						</td>
 					</tr>
 					<?php if ( is_multisite() ) : ?>
 					<tr>
-						<th scope="row"><?php esc_html_e( 'Sites', 'wp-user-groups' ); ?></th>
+						<th scope="row"><?php esc_html_e( 'Sites', 'access-groups' ); ?></th>
 						<td>
 							<fieldset>
-								<legend class="screen-reader-text"><?php esc_html_e( 'Sites where this group applies', 'wp-user-groups' ); ?></legend>
+								<legend class="screen-reader-text"><?php esc_html_e( 'Sites where this group applies', 'access-groups' ); ?></legend>
 								<label>
 									<input type="radio" name="sites_scope" value="all" <?php checked( empty( $current_sites ) ); ?> />
-									<?php esc_html_e( 'All sites on the network (including sites added later)', 'wp-user-groups' ); ?>
+									<?php esc_html_e( 'All sites on the network (including sites added later)', 'access-groups' ); ?>
 								</label><br />
 								<label>
 									<input type="radio" name="sites_scope" value="selected" <?php checked( ! empty( $current_sites ) ); ?> />
-									<?php esc_html_e( 'Only the selected sites', 'wp-user-groups' ); ?>
+									<?php esc_html_e( 'Only the selected sites', 'access-groups' ); ?>
 								</label>
 								<div style="margin-top:0.75em;max-height:260px;overflow:auto;border:1px solid #dcdcde;padding:0.5em 1em;background:#fff;">
 									<?php
@@ -321,15 +322,15 @@ class WP_User_Groups_Admin {
 									}
 									?>
 								</div>
-								<p class="description"><?php esc_html_e( 'Pick "All sites" for a team that should reach the entire network without manual per-site setup. "Only the selected sites" requires at least one checked site.', 'wp-user-groups' ); ?></p>
+								<p class="description"><?php esc_html_e( 'Pick "All sites" for a team that should reach the entire network without manual per-site setup. "Only the selected sites" requires at least one checked site.', 'access-groups' ); ?></p>
 							</fieldset>
 						</td>
 					</tr>
 					<?php endif; ?>
 				</table>
 
-				<?php submit_button( $group ? __( 'Update Group', 'wp-user-groups' ) : __( 'Create Group', 'wp-user-groups' ) ); ?>
-				<a href="<?php echo esc_url( $back_url ); ?>" class="button button-secondary"><?php esc_html_e( 'Back to groups', 'wp-user-groups' ); ?></a>
+				<?php submit_button( $group ? __( 'Update Group', 'access-groups' ) : __( 'Create Group', 'access-groups' ) ); ?>
+				<a href="<?php echo esc_url( $back_url ); ?>" class="button button-secondary"><?php esc_html_e( 'Back to groups', 'access-groups' ); ?></a>
 			</form>
 		</div>
 		<?php
@@ -344,7 +345,7 @@ class WP_User_Groups_Admin {
 		check_admin_referer( self::save_nonce_action( $group_id ) );
 
 		if ( ! $this->current_user_can_manage() ) {
-			wp_die( esc_html__( 'You do not have permission to manage groups.', 'wp-user-groups' ) );
+			wp_die( esc_html__( 'You do not have permission to manage groups.', 'access-groups' ) );
 		}
 
 		$name = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
@@ -358,7 +359,7 @@ class WP_User_Groups_Admin {
 				if ( empty( $_POST['sites'] ) || ! is_array( $_POST['sites'] ) ) {
 					$this->redirect_with_notice(
 						'save-failed',
-						__( 'Select at least one site, or choose "All sites".', 'wp-user-groups' ),
+						__( 'Select at least one site, or choose "All sites".', 'access-groups' ),
 						$group_id
 					);
 					return;
@@ -368,7 +369,7 @@ class WP_User_Groups_Admin {
 		}
 
 		if ( $group_id ) {
-			$result = WP_User_Groups::update_group(
+			$result = Access_Groups::update_group(
 				$group_id,
 				array(
 					'name' => $name,
@@ -377,7 +378,7 @@ class WP_User_Groups_Admin {
 				)
 			);
 		} else {
-			$result   = WP_User_Groups::create_group( $name, $slug, $role );
+			$result   = Access_Groups::create_group( $name, $slug, $role );
 			$group_id = is_wp_error( $result ) ? 0 : (int) $result;
 		}
 
@@ -387,7 +388,7 @@ class WP_User_Groups_Admin {
 		}
 
 		if ( is_multisite() && $group_id ) {
-			WP_User_Groups::set_group_sites( $group_id, $sites );
+			Access_Groups::set_group_sites( $group_id, $sites );
 		}
 
 		$this->redirect_with_notice( 'saved' );
@@ -396,17 +397,17 @@ class WP_User_Groups_Admin {
 	public function handle_delete() {
 		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_key( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : '';
 		if ( 'POST' !== $method ) {
-			wp_die( esc_html__( 'Invalid request.', 'wp-user-groups' ), '', array( 'response' => 405 ) );
+			wp_die( esc_html__( 'Invalid request.', 'access-groups' ), '', array( 'response' => 405 ) );
 		}
 
 		$group_id = isset( $_POST['group_id'] ) ? (int) $_POST['group_id'] : 0;
 		check_admin_referer( self::delete_nonce_action( $group_id ) );
 
 		if ( ! $this->current_user_can_manage() ) {
-			wp_die( esc_html__( 'You do not have permission to manage groups.', 'wp-user-groups' ) );
+			wp_die( esc_html__( 'You do not have permission to manage groups.', 'access-groups' ) );
 		}
 
-		if ( ! $group_id || ! WP_User_Groups::delete_group( $group_id ) ) {
+		if ( ! $group_id || ! Access_Groups::delete_group( $group_id ) ) {
 			$this->redirect_with_notice( 'delete-failed' );
 			return;
 		}
@@ -423,24 +424,24 @@ class WP_User_Groups_Admin {
 			return;
 		}
 
-		$groups         = WP_User_Groups::get_all_groups();
-		$user_group_ids = WP_User_Groups::get_user_group_ids( $user->ID );
+		$groups         = Access_Groups::get_all_groups();
+		$user_group_ids = Access_Groups::get_user_group_ids( $user->ID );
 		$role_names     = wp_roles()->get_names();
 		?>
-		<h2><?php esc_html_e( 'User Groups', 'wp-user-groups' ); ?></h2>
+		<h2><?php esc_html_e( 'Access Groups', 'access-groups' ); ?></h2>
 		<table class="form-table" role="presentation">
 			<tr>
-				<th scope="row"><?php esc_html_e( 'Groups', 'wp-user-groups' ); ?></th>
+				<th scope="row"><?php esc_html_e( 'Groups', 'access-groups' ); ?></th>
 				<td>
-					<?php wp_nonce_field( self::USER_NONCE, 'wpug_user_nonce' ); ?>
+					<?php wp_nonce_field( self::USER_NONCE, 'ag_user_nonce' ); ?>
 					<?php if ( empty( $groups ) ) : ?>
-						<p><em><?php esc_html_e( 'No groups have been defined yet.', 'wp-user-groups' ); ?></em></p>
+						<p><em><?php esc_html_e( 'No groups have been defined yet.', 'access-groups' ); ?></em></p>
 					<?php else : ?>
 						<fieldset>
-							<legend class="screen-reader-text"><?php esc_html_e( 'User Groups', 'wp-user-groups' ); ?></legend>
+							<legend class="screen-reader-text"><?php esc_html_e( 'Access Groups', 'access-groups' ); ?></legend>
 							<?php foreach ( $groups as $group ) : ?>
 								<label style="display:block;margin-bottom:0.25em;">
-									<input type="checkbox" name="wpug_groups[]" value="<?php echo (int) $group['id']; ?>" <?php checked( in_array( $group['id'], $user_group_ids, true ) ); ?> />
+									<input type="checkbox" name="ag_groups[]" value="<?php echo (int) $group['id']; ?>" <?php checked( in_array( $group['id'], $user_group_ids, true ) ); ?> />
 									<strong><?php echo esc_html( $group['name'] ); ?></strong>
 									<?php if ( $group['role'] && isset( $role_names[ $group['role'] ] ) ) : ?>
 										<span style="color:#646970;">— <?php echo esc_html( translate_user_role( $role_names[ $group['role'] ] ) ); ?></span>
@@ -448,7 +449,7 @@ class WP_User_Groups_Admin {
 								</label>
 							<?php endforeach; ?>
 						</fieldset>
-						<p class="description"><?php esc_html_e( "Membership grants the group's role in addition to the user's existing role.", 'wp-user-groups' ); ?></p>
+						<p class="description"><?php esc_html_e( "Membership grants the group's role in addition to the user's existing role.", 'access-groups' ); ?></p>
 					<?php endif; ?>
 				</td>
 			</tr>
@@ -460,15 +461,15 @@ class WP_User_Groups_Admin {
 		if ( ! $this->current_user_can_manage() ) {
 			return;
 		}
-		if ( empty( $_POST['wpug_user_nonce'] ) || ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['wpug_user_nonce'] ) ), self::USER_NONCE ) ) {
+		if ( empty( $_POST['ag_user_nonce'] ) || ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['ag_user_nonce'] ) ), self::USER_NONCE ) ) {
 			return;
 		}
 
-		$submitted = ( isset( $_POST['wpug_groups'] ) && is_array( $_POST['wpug_groups'] ) )
-			? array_map( 'intval', wp_unslash( $_POST['wpug_groups'] ) )
+		$submitted = ( isset( $_POST['ag_groups'] ) && is_array( $_POST['ag_groups'] ) )
+			? array_map( 'intval', wp_unslash( $_POST['ag_groups'] ) )
 			: array();
 
-		WP_User_Groups::set_user_groups( $user_id, $submitted );
+		Access_Groups::set_user_groups( $user_id, $submitted );
 	}
 
 	/* ------------------------------------------------------------------
@@ -476,15 +477,15 @@ class WP_User_Groups_Admin {
 	 * ---------------------------------------------------------------- */
 
 	public function add_users_column( $columns ) {
-		$columns['user_groups'] = __( 'Groups', 'wp-user-groups' );
+		$columns['access_groups'] = __( 'Groups', 'access-groups' );
 		return $columns;
 	}
 
 	public function render_users_column( $output, $column, $user_id ) {
-		if ( 'user_groups' !== $column ) {
+		if ( 'access_groups' !== $column ) {
 			return $output;
 		}
-		$groups = WP_User_Groups::get_user_groups( $user_id );
+		$groups = Access_Groups::get_user_groups( $user_id );
 		if ( empty( $groups ) ) {
 			return '&mdash;';
 		}
@@ -535,11 +536,11 @@ class WP_User_Groups_Admin {
 		$detail = isset( $_GET['detail'] ) ? sanitize_text_field( wp_unslash( $_GET['detail'] ) ) : '';
 
 		$map = array(
-			'saved'         => array( 'success', __( 'Group saved.', 'wp-user-groups' ) ),
-			'deleted'       => array( 'success', __( 'Group deleted.', 'wp-user-groups' ) ),
-			'missing-name'  => array( 'error', __( 'A name is required.', 'wp-user-groups' ) ),
-			'save-failed'   => array( 'error', __( 'The group could not be saved.', 'wp-user-groups' ) ),
-			'delete-failed' => array( 'error', __( 'The group could not be deleted.', 'wp-user-groups' ) ),
+			'saved'         => array( 'success', __( 'Group saved.', 'access-groups' ) ),
+			'deleted'       => array( 'success', __( 'Group deleted.', 'access-groups' ) ),
+			'missing-name'  => array( 'error', __( 'A name is required.', 'access-groups' ) ),
+			'save-failed'   => array( 'error', __( 'The group could not be saved.', 'access-groups' ) ),
+			'delete-failed' => array( 'error', __( 'The group could not be deleted.', 'access-groups' ) ),
 		);
 
 		if ( ! isset( $map[ $notice ] ) ) {

@@ -1,18 +1,24 @@
-# User Groups
+# Access Groups
 
-[![Tests](https://github.com/dd32/wp-user-groups/actions/workflows/test.yml/badge.svg?branch=trunk)](https://github.com/dd32/wp-user-groups/actions/workflows/test.yml)
+[![Tests](https://github.com/dd32/wp-user-access-groups/actions/workflows/test.yml/badge.svg?branch=trunk)](https://github.com/dd32/wp-user-access-groups/actions/workflows/test.yml)
 
-Unix-style user groups for WordPress. Define a group, attach a role, add users to it — members inherit the role everywhere the group applies.
+> Call them user groups, teams, cohorts, or access control lists — whatever fits. This plugin adds one more layer to WordPress' permission model.
 
-Works on single-site WordPress and multisite networks. On multisite a single group can span selected sites or the entire network, so a "Meta Team" or "Playground Contributors" group doesn't need per-site setup.
+WordPress already stacks **capabilities** inside **roles** inside **users**. Access Groups adds the layer above that: **roles attached to groups of users**, applied to one site or the whole multisite network.
+
+```
+capabilities  ->  roles  ->  groups of users  ->  sites
+```
+
+Create a group, pick a role, drop users in. Members get that role everywhere the group applies. Remove them and the access is gone on the next request — no stale `{prefix}capabilities` rows, no `switch_to_blog` juggling.
 
 ## Why
 
-WordPress roles and capabilities are per-site. On a large multisite network, granting a team access across 50 sites usually means adding each user to each site by hand — and remembering to remove them everywhere when they leave. This plugin turns that into:
+WordPress roles and capabilities are per-site. On a large multisite network, granting a team access across 50 sites usually means adding each user to each site by hand — and remembering to remove them everywhere when they leave. Access Groups turns that into:
 
 1. Create a group, pick a role.
 2. Add the user to the group.
-3. They have that role everywhere the group applies.
+3. They have that role on every site the group applies to.
 4. Remove them from the group → access is gone everywhere.
 
 ## Features
@@ -21,7 +27,7 @@ WordPress roles and capabilities are per-site. On a large multisite network, gra
 - **Runtime capability grants.** Access is granted through the `user_has_cap` filter, so removing a user from a group drops their access on the next request — no stale `{prefix}capabilities` usermeta to clean up.
 - **Multisite-native.** Group definitions live in a single network-level site option; memberships live in `wp_usermeta`, which is global on multisite. No `switch_to_blog` juggling.
 - **Site scoping.** A group can apply to every site on the network (including sites added later) or a curated list of sites.
-- **Admin UI.** Users → Groups (single site) or Network Admin → Users → Groups (multisite). Per-user checkboxes on the Edit User screen. A "Groups" column on the Users list table.
+- **Admin UI.** Users → Access Groups (single site) or Network Admin → Users → Access Groups (multisite). Per-user checkboxes on the Edit User screen. A "Groups" column on the Users list table.
 - **Cleans up after itself.** Deleting a group removes its memberships. Deleting a user drops their memberships. Deleting a site removes it from any group that targeted it.
 
 ## Data model
@@ -30,9 +36,9 @@ Three WordPress primitives, all served by the object cache or metadata cache:
 
 | Storage | Purpose |
 |---|---|
-| `wp_user_groups` site option | Map of group ID → `{ id, name, slug, role, sites }`. `get_site_option()` is per-network on multisite, per-install on single site. |
-| `{base_prefix}user_groups` user meta | Array of group IDs the user belongs to (authoritative). `wp_usermeta` is global on multisite, so a user's memberships follow them across sites. |
-| `{base_prefix}user_group_{id}` user meta | Presence marker, one row per (user, group). Gives `"who is in group N?"` an indexed `meta_key` lookup with no `LIKE` and no PHP-side filtering. |
+| `access_groups` site option | Map of group ID → `{ id, name, slug, role, sites }`. `get_site_option()` is per-network on multisite, per-install on single site. |
+| `{base_prefix}access_groups` user meta | Array of group IDs the user belongs to (authoritative). `wp_usermeta` is global on multisite, so a user's memberships follow them across sites. |
+| `{base_prefix}access_group_{id}` user meta | Presence marker, one row per (user, group). Gives "who is in group N?" an indexed `meta_key` lookup with no `LIKE` and no PHP-side filtering. |
 
 "Which groups is user X in?" is a single `get_user_meta()` call — served from the metadata cache after the first hit. "Which users are in group Y?" is an indexed lookup on the per-group marker key. Both keys use `$wpdb->base_prefix` so they line up with WordPress' own conventions on custom-prefix installs.
 
@@ -50,7 +56,7 @@ The user's actual `{prefix}capabilities` usermeta is never modified. This is wha
 
 ## Installation
 
-1. Drop the `wp-user-groups` directory into `wp-content/plugins/`.
+1. Drop the plugin directory into `wp-content/plugins/`.
 2. Activate it.
    - On multisite, **network-activate** the plugin (it's marked `Network: true`).
 
@@ -60,7 +66,7 @@ No schema changes are required. Group definitions live in a site option and memb
 
 ### Creating a group
 
-**Users → Groups → Add New** (on single site) or **Network Admin → Users → Groups → Add New** (on multisite):
+**Users → Access Groups → Add New** (on single site) or **Network Admin → Users → Access Groups → Add New** (on multisite):
 
 - **Name** — display name, e.g. "WordPress Meta Team".
 - **Slug** — optional; auto-generated if blank.
@@ -69,27 +75,27 @@ No schema changes are required. Group definitions live in a site option and memb
 
 ### Adding users to groups
 
-Edit a user's profile. The **User Groups** section lists every defined group with a checkbox.
+Edit a user's profile. The **Access Groups** section lists every defined group with a checkbox.
 
 ### Programmatic API
 
 ```php
 // Create a group.
-$id = WP_User_Groups::create_group( 'Meta Team', 'meta-team', 'editor' );
+$id = Access_Groups::create_group( 'Meta Team', 'meta-team', 'editor' );
 
 // Scope it to specific sites on multisite (empty array = all sites).
-WP_User_Groups::set_group_sites( $id, array( 1, 4, 9 ) );
+Access_Groups::set_group_sites( $id, array( 1, 4, 9 ) );
 
 // Add / remove members.
-WP_User_Groups::add_user_to_group( $user_id, $id );
-WP_User_Groups::remove_user_from_group( $user_id, $id );
-WP_User_Groups::set_user_groups( $user_id, array( $id, $other_id ) );
+Access_Groups::add_user_to_group( $user_id, $id );
+Access_Groups::remove_user_from_group( $user_id, $id );
+Access_Groups::set_user_groups( $user_id, array( $id, $other_id ) );
 
 // Inspect.
-WP_User_Groups::get_user_groups( $user_id );        // full group records, keyed by ID
-WP_User_Groups::get_user_group_ids( $user_id );     // just the IDs
-WP_User_Groups::get_group_members( $id );           // user IDs in this group
-WP_User_Groups::count_members_per_group();          // [ group_id => count ]
+Access_Groups::get_user_groups( $user_id );        // full group records, keyed by ID
+Access_Groups::get_user_group_ids( $user_id );     // just the IDs
+Access_Groups::get_group_members( $id );           // user IDs in this group
+Access_Groups::count_members_per_group();          // [ group_id => count ]
 ```
 
 ### Checking access
@@ -110,6 +116,16 @@ if ( user_can( $user_id, 'edit_others_posts' ) ) {
 | Assign groups to a user | same as above | same as above |
 
 On multisite, group management is restricted to super admins so that a compromised single-site administrator can't grant themselves access across the network.
+
+## Upgrading from 0.1.x ("User Groups")
+
+This plugin was previously shipped as "User Groups" using the slug `wp-user-groups`. On first load, 0.2.0 transparently migrates:
+
+- the `wp_user_groups` site option → `access_groups`;
+- the `{base_prefix}user_groups` user meta → `{base_prefix}access_groups`;
+- the `{base_prefix}user_group_{id}` marker rows → `{base_prefix}access_group_{id}`.
+
+The migration runs once, is guarded by a schema-version site option, and preserves every membership and group definition.
 
 ## Development
 

@@ -6,6 +6,6 @@
 		"SCRIPT_DEBUG": true
 	},
 	"lifecycleScripts": {
-		"afterStart": "wp-env run cli wp eval-file wp-content/plugins/wp-user-groups/bin/seed.php"
+		"afterStart": "wp-env run cli wp eval-file wp-content/plugins/wp-user-access-groups/bin/seed.php"
 	}
 }

@@ -1,10 +1,10 @@
 <?php
 /**
- * Seed the local wp-env environment with sample groups and users.
+ * Seed the local wp-env environment with sample access groups and users.
  *
  * Usage:
  *   npm run seed                                            (single site)
- *   wp-env run cli wp eval-file wp-content/plugins/wp-user-groups/bin/seed.php
+ *   wp-env run cli wp eval-file wp-content/plugins/wp-user-access-groups/bin/seed.php
  *
  * Running again is safe — existing groups and users are reused.
  */
@@ -14,8 +14,8 @@ if ( ! defined( 'WP_CLI' ) || ! WP_CLI ) {
 	exit( 1 );
 }
 
-if ( ! class_exists( 'WP_User_Groups' ) ) {
-	WP_CLI::error( 'The User Groups plugin is not loaded. Is wp-env running with this plugin active?' );
+if ( ! class_exists( 'Access_Groups' ) ) {
+	WP_CLI::error( 'The Access Groups plugin is not loaded. Is wp-env running with this plugin active?' );
 }
 
 $default_password = 'password';
@@ -50,14 +50,14 @@ $group_defs = array(
 
 $group_ids = array();
 foreach ( $group_defs as $def ) {
-	$existing = WP_User_Groups::get_group_by_slug( $def['slug'] );
+	$existing = Access_Groups::get_group_by_slug( $def['slug'] );
 	if ( $existing ) {
 		$group_ids[ $def['slug'] ] = (int) $existing['id'];
 		WP_CLI::log( sprintf( '=  Group exists: %s (#%d)', $def['name'], $existing['id'] ) );
 		continue;
 	}
 
-	$id = WP_User_Groups::create_group( $def['name'], $def['slug'], $def['role'] );
+	$id = Access_Groups::create_group( $def['name'], $def['slug'], $def['role'] );
 	if ( is_wp_error( $id ) ) {
 		WP_CLI::warning( sprintf( 'Failed to create group "%s": %s', $def['name'], $id->get_error_message() ) );
 		continue;
@@ -110,7 +110,7 @@ foreach ( $user_defs as $def ) {
 			$ids[] = $group_ids[ $slug ];
 		}
 	}
-	WP_User_Groups::set_user_groups( $user->ID, $ids );
+	Access_Groups::set_user_groups( $user->ID, $ids );
 	if ( $def['groups'] ) {
 		WP_CLI::log( sprintf( '   -> groups: %s', implode( ', ', $def['groups'] ) ) );
 	} else {
