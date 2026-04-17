@@ -9,9 +9,19 @@
  *   `get_site_option()` is per-network on multisite, per-install on single
  *   site, and is cached by the object cache after the first read.
  *
- * - User memberships live in user meta (`wp_user_groups` -> array of group
- *   IDs). `wp_usermeta` is a global table on multisite, and WordPress'
- *   metadata cache makes every repeat read in a request free.
+ * - User memberships live in user meta. Two keys work together:
+ *
+ *     `{base_prefix}user_groups`          -> array of group IDs the user
+ *                                            belongs to (authoritative).
+ *     `{base_prefix}user_group_{id}`      -> presence marker, one row per
+ *                                            (user, group). Lets us answer
+ *                                            "who is in group N?" with an
+ *                                            indexed `meta_key` lookup,
+ *                                            no LIKE or PHP-side filtering.
+ *
+ *   `wp_usermeta` is global on multisite, and `$wpdb->base_prefix` is
+ *   constant across the network, so a user's memberships follow them
+ *   across every site.
  *
  * Capabilities are granted at runtime through `user_has_cap`, so removing
  * a user from a group drops their access on the next request.
@@ -21,8 +31,9 @@ defined( 'ABSPATH' ) || exit;
 
 class WP_User_Groups {
 
-	const OPTION_KEY    = 'wp_user_groups';
-	const USER_META_KEY = 'wp_user_groups';
+	const OPTION_KEY           = 'wp_user_groups';
+	const INDEX_VERSION_OPTION = 'wp_user_groups_index_version';
+	const INDEX_VERSION        = 1;
 
 	private static $instance;
 
@@ -44,12 +55,34 @@ class WP_User_Groups {
 	private function __construct() {
 		add_filter( 'user_has_cap', array( $this, 'filter_user_has_cap' ), 10, 4 );
 		add_action( 'deleted_user', array( $this, 'on_user_deleted' ) );
+		add_action( 'init', array( $this, 'maybe_build_membership_index' ) );
 
 		if ( is_multisite() ) {
 			add_filter( 'get_blogs_of_user', array( $this, 'filter_get_blogs_of_user' ), 10, 3 );
 			add_filter( 'is_user_member_of_blog', array( $this, 'filter_is_user_member_of_blog' ), 10, 3 );
 			add_action( 'wp_delete_site', array( $this, 'on_site_deleted' ) );
 		}
+	}
+
+	/* ------------------------------------------------------------------
+	 * Meta key helpers
+	 * ---------------------------------------------------------------- */
+
+	/**
+	 * Primary membership key: an array of group IDs stored on the user.
+	 */
+	public static function user_meta_key() {
+		global $wpdb;
+		return $wpdb->base_prefix . 'user_groups';
+	}
+
+	/**
+	 * Per-group presence marker: one usermeta row per (user, group) for
+	 * indexed `meta_key` lookups.
+	 */
+	public static function group_meta_key( $group_id ) {
+		global $wpdb;
+		return $wpdb->base_prefix . 'user_group_' . (int) $group_id;
 	}
 
 	/* ------------------------------------------------------------------
@@ -256,7 +289,7 @@ class WP_User_Groups {
 			return array();
 		}
 
-		$raw = get_user_meta( $user_id, self::USER_META_KEY, true );
+		$raw = get_user_meta( $user_id, self::user_meta_key(), true );
 		if ( ! is_array( $raw ) ) {
 			return array();
 		}
@@ -303,7 +336,8 @@ class WP_User_Groups {
 		}
 
 		$ids[] = $group_id;
-		update_user_meta( $user_id, self::USER_META_KEY, array_values( $ids ) );
+		update_user_meta( $user_id, self::user_meta_key(), array_values( $ids ) );
+		update_user_meta( $user_id, self::group_meta_key( $group_id ), 1 );
 		self::invalidate_membership_caches();
 		return true;
 	}
@@ -320,10 +354,11 @@ class WP_User_Groups {
 		}
 
 		if ( empty( $new ) ) {
-			delete_user_meta( $user_id, self::USER_META_KEY );
+			delete_user_meta( $user_id, self::user_meta_key() );
 		} else {
-			update_user_meta( $user_id, self::USER_META_KEY, $new );
+			update_user_meta( $user_id, self::user_meta_key(), $new );
 		}
+		delete_user_meta( $user_id, self::group_meta_key( $group_id ) );
 		self::invalidate_membership_caches();
 		return true;
 	}
@@ -344,11 +379,21 @@ class WP_User_Groups {
 		}
 		$clean = array_values( array_unique( $clean ) );
 
+		$previous = self::get_user_group_ids( $user_id );
+
 		if ( empty( $clean ) ) {
-			delete_user_meta( $user_id, self::USER_META_KEY );
+			delete_user_meta( $user_id, self::user_meta_key() );
 		} else {
-			update_user_meta( $user_id, self::USER_META_KEY, $clean );
+			update_user_meta( $user_id, self::user_meta_key(), $clean );
 		}
+
+		foreach ( array_diff( $previous, $clean ) as $removed_id ) {
+			delete_user_meta( $user_id, self::group_meta_key( (int) $removed_id ) );
+		}
+		foreach ( array_diff( $clean, $previous ) as $added_id ) {
+			update_user_meta( $user_id, self::group_meta_key( (int) $added_id ), 1 );
+		}
+
 		self::invalidate_membership_caches();
 		return true;
 	}
@@ -356,9 +401,8 @@ class WP_User_Groups {
 	/**
 	 * User IDs that belong to a group.
 	 *
-	 * Prefilters the usermeta scan with a LIKE on the serialized `i:<id>;`
-	 * token so we only load metadata for users who plausibly belong. LIKE
-	 * may collide with serialized array keys, so we still verify in PHP.
+	 * One indexed `meta_key` lookup — the per-group presence marker is
+	 * exactly what a standard usermeta index is built for.
 	 *
 	 * @return int[]
 	 */
@@ -369,25 +413,14 @@ class WP_User_Groups {
 			return array();
 		}
 
-		$needle = 'i:' . $group_id . ';';
-
 		$user_ids = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s AND meta_value LIKE %s",
-				self::USER_META_KEY,
-				'%' . $wpdb->esc_like( $needle ) . '%'
+				"SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s",
+				self::group_meta_key( $group_id )
 			)
 		);
 
-		$members = array();
-		foreach ( $user_ids as $user_id ) {
-			$user_id = (int) $user_id;
-			$ids     = get_user_meta( $user_id, self::USER_META_KEY, true );
-			if ( is_array( $ids ) && in_array( $group_id, array_map( 'intval', $ids ), true ) ) {
-				$members[] = $user_id;
-			}
-		}
-		return $members;
+		return array_map( 'intval', $user_ids );
 	}
 
 	/**
@@ -399,26 +432,23 @@ class WP_User_Groups {
 		}
 
 		global $wpdb;
+		$prefix = $wpdb->base_prefix . 'user_group_';
+		$like   = $wpdb->esc_like( $prefix ) . '%';
 
-		$rows = $wpdb->get_col(
+		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = %s",
-				self::USER_META_KEY
-			)
+				"SELECT meta_key, COUNT(user_id) AS n FROM {$wpdb->usermeta} WHERE meta_key LIKE %s GROUP BY meta_key",
+				$like
+			),
+			ARRAY_A
 		);
 
 		$counts = array();
+		$offset = strlen( $prefix );
 		foreach ( $rows as $row ) {
-			$ids = maybe_unserialize( $row );
-			if ( ! is_array( $ids ) ) {
-				continue;
-			}
-			foreach ( $ids as $id ) {
-				$id = (int) $id;
-				if ( $id <= 0 ) {
-					continue;
-				}
-				$counts[ $id ] = isset( $counts[ $id ] ) ? $counts[ $id ] + 1 : 1;
+			$group_id = (int) substr( $row['meta_key'], $offset );
+			if ( $group_id > 0 ) {
+				$counts[ $group_id ] = (int) $row['n'];
 			}
 		}
 
@@ -565,7 +595,14 @@ class WP_User_Groups {
 	}
 
 	public function on_user_deleted( $user_id ) {
-		delete_user_meta( (int) $user_id, self::USER_META_KEY );
+		$user_id = (int) $user_id;
+		$ids     = get_user_meta( $user_id, self::user_meta_key(), true );
+		if ( is_array( $ids ) ) {
+			foreach ( $ids as $group_id ) {
+				delete_user_meta( $user_id, self::group_meta_key( (int) $group_id ) );
+			}
+		}
+		delete_user_meta( $user_id, self::user_meta_key() );
 		self::invalidate_membership_caches();
 	}
 
@@ -588,6 +625,53 @@ class WP_User_Groups {
 		if ( $changed ) {
 			self::save_groups( $groups );
 		}
+	}
+
+	/* ------------------------------------------------------------------
+	 * One-time migrations
+	 * ---------------------------------------------------------------- */
+
+	/**
+	 * Back-fill the per-group presence markers for any install that was
+	 * upgraded from a version where only the primary array existed.
+	 * Runs once; re-runs if {@see self::INDEX_VERSION} is bumped.
+	 */
+	public function maybe_build_membership_index() {
+		$current = (int) get_site_option( self::INDEX_VERSION_OPTION, 0 );
+		if ( $current >= self::INDEX_VERSION ) {
+			return;
+		}
+
+		self::rebuild_membership_index();
+		update_site_option( self::INDEX_VERSION_OPTION, self::INDEX_VERSION );
+	}
+
+	public static function rebuild_membership_index() {
+		global $wpdb;
+
+		$primary = self::user_meta_key();
+		$rows    = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT user_id, meta_value FROM {$wpdb->usermeta} WHERE meta_key = %s",
+				$primary
+			)
+		);
+
+		foreach ( $rows as $row ) {
+			$user_id = (int) $row->user_id;
+			$ids     = maybe_unserialize( $row->meta_value );
+			if ( ! is_array( $ids ) ) {
+				continue;
+			}
+			foreach ( $ids as $id ) {
+				$id = (int) $id;
+				if ( $id > 0 ) {
+					update_user_meta( $user_id, self::group_meta_key( $id ), 1 );
+				}
+			}
+		}
+
+		self::invalidate_membership_caches();
 	}
 
 	/* ------------------------------------------------------------------
@@ -645,37 +729,34 @@ class WP_User_Groups {
 	/**
 	 * Strip one group ID from every user's membership list.
 	 *
-	 * Relies on the meta_key index (ref lookup); per-user reads after the
-	 * first hit the object cache.
+	 * Uses the per-group index to find everyone affected — one indexed
+	 * lookup, no full-table scan.
 	 */
 	private static function remove_group_from_all_users( $group_id ) {
 		global $wpdb;
-
-		$needle = 'i:' . (int) $group_id . ';';
+		$group_id    = (int) $group_id;
+		$primary_key = self::user_meta_key();
+		$marker_key  = self::group_meta_key( $group_id );
 
 		$user_ids = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s AND meta_value LIKE %s",
-				self::USER_META_KEY,
-				'%' . $wpdb->esc_like( $needle ) . '%'
+				"SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s",
+				$marker_key
 			)
 		);
 
 		foreach ( $user_ids as $user_id ) {
 			$user_id = (int) $user_id;
-			$ids     = get_user_meta( $user_id, self::USER_META_KEY, true );
-			if ( ! is_array( $ids ) ) {
-				continue;
+			$ids     = get_user_meta( $user_id, $primary_key, true );
+			if ( is_array( $ids ) ) {
+				$filtered = array_values( array_diff( array_map( 'intval', $ids ), array( $group_id ) ) );
+				if ( empty( $filtered ) ) {
+					delete_user_meta( $user_id, $primary_key );
+				} elseif ( count( $filtered ) !== count( $ids ) ) {
+					update_user_meta( $user_id, $primary_key, $filtered );
+				}
 			}
-			$filtered = array_values( array_diff( array_map( 'intval', $ids ), array( $group_id ) ) );
-			if ( count( $filtered ) === count( $ids ) ) {
-				continue;
-			}
-			if ( empty( $filtered ) ) {
-				delete_user_meta( $user_id, self::USER_META_KEY );
-			} else {
-				update_user_meta( $user_id, self::USER_META_KEY, $filtered );
-			}
+			delete_user_meta( $user_id, $marker_key );
 		}
 
 		self::invalidate_membership_caches();

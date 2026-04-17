@@ -125,4 +125,63 @@ class Test_Membership extends WP_UnitTestCase {
 		$members = WP_User_Groups::get_group_members( $this->group_id );
 		$this->assertNotContains( $this->user_id, $members );
 	}
+
+	/* ----- Per-group marker index ----- */
+
+	public function test_meta_keys_use_base_prefix() {
+		global $wpdb;
+		$this->assertSame( $wpdb->base_prefix . 'user_groups', WP_User_Groups::user_meta_key() );
+		$this->assertSame( $wpdb->base_prefix . 'user_group_7', WP_User_Groups::group_meta_key( 7 ) );
+	}
+
+	public function test_adding_user_sets_marker_row() {
+		WP_User_Groups::add_user_to_group( $this->user_id, $this->group_id );
+
+		$marker = get_user_meta( $this->user_id, WP_User_Groups::group_meta_key( $this->group_id ), true );
+		$this->assertSame( '1', (string) $marker );
+	}
+
+	public function test_removing_user_deletes_marker_row() {
+		WP_User_Groups::add_user_to_group( $this->user_id, $this->group_id );
+		WP_User_Groups::remove_user_from_group( $this->user_id, $this->group_id );
+
+		$marker = get_user_meta( $this->user_id, WP_User_Groups::group_meta_key( $this->group_id ), true );
+		$this->assertSame( '', (string) $marker );
+	}
+
+	public function test_set_user_groups_syncs_markers() {
+		$g2 = WP_User_Groups::create_group( 'Second', 'second', 'author' );
+
+		WP_User_Groups::set_user_groups( $this->user_id, array( $this->group_id ) );
+		WP_User_Groups::set_user_groups( $this->user_id, array( $g2 ) );
+
+		$this->assertSame( '', (string) get_user_meta( $this->user_id, WP_User_Groups::group_meta_key( $this->group_id ), true ) );
+		$this->assertSame( '1', (string) get_user_meta( $this->user_id, WP_User_Groups::group_meta_key( $g2 ), true ) );
+	}
+
+	public function test_get_group_members_uses_marker_index() {
+		// Write the primary array directly without markers, simulating legacy data.
+		update_user_meta( $this->user_id, WP_User_Groups::user_meta_key(), array( $this->group_id ) );
+
+		// With no marker yet, the indexed lookup sees nobody.
+		$members = WP_User_Groups::get_group_members( $this->group_id );
+		$this->assertEmpty( $members );
+
+		// Rebuilding the index backfills the marker and the member appears.
+		WP_User_Groups::rebuild_membership_index();
+
+		$members = WP_User_Groups::get_group_members( $this->group_id );
+		$this->assertContains( $this->user_id, $members );
+	}
+
+	public function test_rebuild_is_idempotent() {
+		WP_User_Groups::add_user_to_group( $this->user_id, $this->group_id );
+
+		WP_User_Groups::rebuild_membership_index();
+		WP_User_Groups::rebuild_membership_index();
+
+		$members = WP_User_Groups::get_group_members( $this->group_id );
+		$this->assertCount( 1, $members );
+		$this->assertContains( $this->user_id, $members );
+	}
 }

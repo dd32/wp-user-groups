@@ -26,14 +26,15 @@ WordPress roles and capabilities are per-site. On a large multisite network, gra
 
 ## Data model
 
-Two WordPress primitives, both cached by the object cache:
+Three WordPress primitives, all served by the object cache or metadata cache:
 
 | Storage | Purpose |
 |---|---|
 | `wp_user_groups` site option | Map of group ID → `{ id, name, slug, role, sites }`. `get_site_option()` is per-network on multisite, per-install on single site. |
-| `wp_user_groups` user meta | Array of group IDs the user belongs to. `wp_usermeta` is global on multisite, so a user's memberships follow them across sites. |
+| `{base_prefix}user_groups` user meta | Array of group IDs the user belongs to (authoritative). `wp_usermeta` is global on multisite, so a user's memberships follow them across sites. |
+| `{base_prefix}user_group_{id}` user meta | Presence marker, one row per (user, group). Gives `"who is in group N?"` an indexed `meta_key` lookup with no `LIKE` and no PHP-side filtering. |
 
-"Which groups is user X in?" is a single `get_user_meta()` call — served from the metadata cache after the first hit. "Which users are in group Y?" uses the indexed `meta_key` lookup on `wp_usermeta`.
+"Which groups is user X in?" is a single `get_user_meta()` call — served from the metadata cache after the first hit. "Which users are in group Y?" is an indexed lookup on the per-group marker key. Both keys use `$wpdb->base_prefix` so they line up with WordPress' own conventions on custom-prefix installs.
 
 ## How access is granted
 
