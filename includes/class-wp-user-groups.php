@@ -2,23 +2,29 @@
 /**
  * Core User Groups logic.
  *
- * Storage uses three global (base_prefix) tables so that data is inherently
- * network-wide on multisite and needs no switch_to_blog() or serialised blobs.
+ * Storage relies on WordPress primitives that are already network-wide and
+ * object-cached:
  *
- * Capabilities are granted at runtime through the `user_has_cap` filter.
- * Removing a user from a group drops their group-derived access immediately.
+ * - Group definitions live in a single site option (`wp_user_groups`).
+ *   `get_site_option()` is per-network on multisite, per-install on single
+ *   site, and is cached by the object cache after the first read.
+ *
+ * - User memberships live in user meta (`wp_user_groups` -> array of group
+ *   IDs). `wp_usermeta` is a global table on multisite, and WordPress'
+ *   metadata cache makes every repeat read in a request free.
+ *
+ * Capabilities are granted at runtime through `user_has_cap`, so removing
+ * a user from a group drops their access on the next request.
  */
 
 defined( 'ABSPATH' ) || exit;
 
 class WP_User_Groups {
 
-	private static $instance;
+	const OPTION_KEY    = 'wp_user_groups';
+	const USER_META_KEY = 'wp_user_groups';
 
-	private static $groups_cache        = null;
-	private static $group_sites_cache   = null;
-	private static $user_group_ids_cache = array();
-	private static $group_caps_cache    = array();
+	private static $instance;
 
 	public static function instance() {
 		if ( ! isset( self::$instance ) ) {
@@ -45,22 +51,22 @@ class WP_User_Groups {
 	/**
 	 * Every group, keyed by group ID.
 	 *
-	 * @return array<int, array{id:int,name:string,slug:string,role:string}>
+	 * @return array<int, array{id:int,name:string,slug:string,role:string,sites:int[]}>
 	 */
 	public static function get_all_groups() {
-		if ( null !== self::$groups_cache ) {
-			return self::$groups_cache;
+		$raw = get_site_option( self::OPTION_KEY, array() );
+		if ( ! is_array( $raw ) ) {
+			return array();
 		}
 
-		global $wpdb;
-		$rows   = $wpdb->get_results( "SELECT * FROM {$wpdb->user_groups} ORDER BY name ASC" );
 		$groups = array();
-		if ( $rows ) {
-			foreach ( $rows as $row ) {
-				$groups[ (int) $row->id ] = self::format_group( $row );
+		foreach ( $raw as $id => $group ) {
+			$id = (int) $id;
+			if ( $id <= 0 || ! is_array( $group ) ) {
+				continue;
 			}
+			$groups[ $id ] = self::normalise_group( $id, $group );
 		}
-		self::$groups_cache = $groups;
 		return $groups;
 	}
 
@@ -70,8 +76,9 @@ class WP_User_Groups {
 	}
 
 	public static function get_group_by_slug( $slug ) {
+		$slug = sanitize_title( $slug );
 		foreach ( self::get_all_groups() as $group ) {
-			if ( $group['slug'] === sanitize_title( $slug ) ) {
+			if ( $group['slug'] === $slug ) {
 				return $group;
 			}
 		}
@@ -82,8 +89,6 @@ class WP_User_Groups {
 	 * @return int|WP_Error  New group ID on success.
 	 */
 	public static function create_group( $name, $slug = '', $role = '' ) {
-		global $wpdb;
-
 		$name = sanitize_text_field( $name );
 		if ( '' === $name ) {
 			return new WP_Error( 'missing_name', __( 'A name is required.', 'wp-user-groups' ) );
@@ -93,52 +98,49 @@ class WP_User_Groups {
 		if ( '' === $slug ) {
 			$slug = 'group';
 		}
-		$slug = self::unique_slug( $slug );
 
 		$role = sanitize_key( $role );
 		if ( $role && ! wp_roles()->is_role( $role ) ) {
 			$role = '';
 		}
 
-		$inserted = $wpdb->insert(
-			$wpdb->user_groups,
+		$groups  = self::get_all_groups();
+		$slug    = self::unique_slug( $slug, $groups );
+		$next_id = $groups ? ( max( array_keys( $groups ) ) + 1 ) : 1;
+
+		$groups[ $next_id ] = self::normalise_group(
+			$next_id,
 			array(
-				'name' => $name,
-				'slug' => $slug,
-				'role' => $role,
-			),
-			array( '%s', '%s', '%s' )
+				'name'  => $name,
+				'slug'  => $slug,
+				'role'  => $role,
+				'sites' => array(),
+			)
 		);
 
-		if ( ! $inserted ) {
-			return new WP_Error( 'db_error', __( 'Could not create the group.', 'wp-user-groups' ) );
-		}
-
-		self::$groups_cache = null;
-		return (int) $wpdb->insert_id;
+		update_site_option( self::OPTION_KEY, $groups );
+		return $next_id;
 	}
 
 	/**
 	 * @return true|WP_Error
 	 */
 	public static function update_group( $group_id, array $data ) {
-		global $wpdb;
 		$group_id = (int) $group_id;
+		$groups   = self::get_all_groups();
 
-		if ( ! self::get_group( $group_id ) ) {
+		if ( ! isset( $groups[ $group_id ] ) ) {
 			return new WP_Error( 'not_found', __( 'Group not found.', 'wp-user-groups' ) );
 		}
 
-		$update  = array();
-		$formats = array();
+		$group = $groups[ $group_id ];
 
 		if ( isset( $data['name'] ) ) {
 			$name = sanitize_text_field( $data['name'] );
 			if ( '' === $name ) {
 				return new WP_Error( 'missing_name', __( 'A name is required.', 'wp-user-groups' ) );
 			}
-			$update['name'] = $name;
-			$formats[]      = '%s';
+			$group['name'] = $name;
 		}
 
 		if ( isset( $data['slug'] ) ) {
@@ -146,18 +148,12 @@ class WP_User_Groups {
 			if ( '' === $slug ) {
 				$slug = 'group';
 			}
-			$existing = $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT id FROM {$wpdb->user_groups} WHERE slug = %s AND id != %d",
-					$slug,
-					$group_id
-				)
-			);
-			if ( $existing ) {
-				return new WP_Error( 'duplicate_slug', __( 'That slug is already in use.', 'wp-user-groups' ) );
+			foreach ( $groups as $other_id => $other ) {
+				if ( $other_id !== $group_id && $other['slug'] === $slug ) {
+					return new WP_Error( 'duplicate_slug', __( 'That slug is already in use.', 'wp-user-groups' ) );
+				}
 			}
-			$update['slug'] = $slug;
-			$formats[]      = '%s';
+			$group['slug'] = $slug;
 		}
 
 		if ( isset( $data['role'] ) ) {
@@ -165,66 +161,32 @@ class WP_User_Groups {
 			if ( $role && ! wp_roles()->is_role( $role ) ) {
 				$role = '';
 			}
-			$update['role'] = $role;
-			$formats[]      = '%s';
+			$group['role'] = $role;
 		}
 
-		if ( empty( $update ) ) {
-			return true;
-		}
-
-		$wpdb->update(
-			$wpdb->user_groups,
-			$update,
-			array( 'id' => $group_id ),
-			$formats,
-			array( '%d' )
-		);
-
-		self::$groups_cache     = null;
-		self::$group_caps_cache = array();
+		$groups[ $group_id ] = self::normalise_group( $group_id, $group );
+		update_site_option( self::OPTION_KEY, $groups );
 		return true;
 	}
 
 	public static function delete_group( $group_id ) {
-		global $wpdb;
 		$group_id = (int) $group_id;
+		$groups   = self::get_all_groups();
 
-		$wpdb->delete( $wpdb->user_group_members, array( 'group_id' => $group_id ), array( '%d' ) );
-		$wpdb->delete( $wpdb->user_group_sites, array( 'group_id' => $group_id ), array( '%d' ) );
-		$deleted = $wpdb->delete( $wpdb->user_groups, array( 'id' => $group_id ), array( '%d' ) );
+		if ( ! isset( $groups[ $group_id ] ) ) {
+			return false;
+		}
 
-		self::flush_all_caches();
-		return (bool) $deleted;
+		unset( $groups[ $group_id ] );
+		update_site_option( self::OPTION_KEY, $groups );
+
+		self::remove_group_from_all_users( $group_id );
+		return true;
 	}
 
 	/* ------------------------------------------------------------------
 	 * Group → Site scoping
 	 * ---------------------------------------------------------------- */
-
-	/**
-	 * @return array<int, int[]>  group_id => [blog_id, …]
-	 */
-	public static function get_all_group_sites() {
-		if ( null !== self::$group_sites_cache ) {
-			return self::$group_sites_cache;
-		}
-
-		global $wpdb;
-		$rows  = $wpdb->get_results( "SELECT group_id, blog_id FROM {$wpdb->user_group_sites}" );
-		$sites = array();
-		if ( $rows ) {
-			foreach ( $rows as $row ) {
-				$gid = (int) $row->group_id;
-				if ( ! isset( $sites[ $gid ] ) ) {
-					$sites[ $gid ] = array();
-				}
-				$sites[ $gid ][] = (int) $row->blog_id;
-			}
-		}
-		self::$group_sites_cache = $sites;
-		return $sites;
-	}
 
 	/**
 	 * Blog IDs that a group explicitly targets.
@@ -233,45 +195,39 @@ class WP_User_Groups {
 	 * @return int[]
 	 */
 	public static function get_group_sites( $group_id ) {
-		$all = self::get_all_group_sites();
-		return isset( $all[ (int) $group_id ] ) ? $all[ (int) $group_id ] : array();
+		$group = self::get_group( $group_id );
+		return $group ? $group['sites'] : array();
 	}
 
 	public static function set_group_sites( $group_id, array $blog_ids ) {
-		global $wpdb;
 		$group_id = (int) $group_id;
-		$blog_ids = array_values( array_unique( array_filter( array_map( 'intval', $blog_ids ) ) ) );
+		$groups   = self::get_all_groups();
 
-		$wpdb->delete( $wpdb->user_group_sites, array( 'group_id' => $group_id ), array( '%d' ) );
-
-		foreach ( $blog_ids as $blog_id ) {
-			$wpdb->insert(
-				$wpdb->user_group_sites,
-				array(
-					'group_id' => $group_id,
-					'blog_id'  => $blog_id,
-				),
-				array( '%d', '%d' )
-			);
+		if ( ! isset( $groups[ $group_id ] ) ) {
+			return false;
 		}
 
-		self::$group_sites_cache = null;
-		self::$group_caps_cache  = array();
+		$groups[ $group_id ]['sites'] = array_values(
+			array_unique( array_filter( array_map( 'intval', $blog_ids ) ) )
+		);
+
+		update_site_option( self::OPTION_KEY, $groups );
+		return true;
 	}
 
-	/**
-	 * Does a group grant access to a specific site?
-	 */
 	public static function group_applies_to_site( $group_id, $blog_id = null ) {
 		if ( ! is_multisite() ) {
 			return true;
 		}
+		$group = self::get_group( $group_id );
+		if ( ! $group ) {
+			return false;
+		}
 		$blog_id = $blog_id ? (int) $blog_id : (int) get_current_blog_id();
-		$sites   = self::get_group_sites( (int) $group_id );
-		if ( empty( $sites ) ) {
+		if ( empty( $group['sites'] ) ) {
 			return true;
 		}
-		return in_array( $blog_id, $sites, true );
+		return in_array( $blog_id, $group['sites'], true );
 	}
 
 	/* ------------------------------------------------------------------
@@ -279,8 +235,6 @@ class WP_User_Groups {
 	 * ---------------------------------------------------------------- */
 
 	/**
-	 * Group IDs for a user.
-	 *
 	 * @return int[]
 	 */
 	public static function get_user_group_ids( $user_id ) {
@@ -288,25 +242,25 @@ class WP_User_Groups {
 		if ( ! $user_id ) {
 			return array();
 		}
-		if ( isset( self::$user_group_ids_cache[ $user_id ] ) ) {
-			return self::$user_group_ids_cache[ $user_id ];
+
+		$raw = get_user_meta( $user_id, self::USER_META_KEY, true );
+		if ( ! is_array( $raw ) ) {
+			return array();
 		}
 
-		global $wpdb;
-		$ids = $wpdb->get_col(
-			$wpdb->prepare(
-				"SELECT group_id FROM {$wpdb->user_group_members} WHERE user_id = %d",
-				$user_id
-			)
-		);
-
-		$ids = array_map( 'intval', $ids );
-		self::$user_group_ids_cache[ $user_id ] = $ids;
-		return $ids;
+		$groups = self::get_all_groups();
+		$ids    = array();
+		foreach ( $raw as $id ) {
+			$id = (int) $id;
+			if ( $id > 0 && isset( $groups[ $id ] ) ) {
+				$ids[] = $id;
+			}
+		}
+		return array_values( array_unique( $ids ) );
 	}
 
 	/**
-	 * Full group records for a user, keyed by group ID.
+	 * Full group records for the user, keyed by group ID.
 	 *
 	 * @return array<int, array>
 	 */
@@ -323,7 +277,6 @@ class WP_User_Groups {
 	}
 
 	public static function add_user_to_group( $user_id, $group_id ) {
-		global $wpdb;
 		$user_id  = (int) $user_id;
 		$group_id = (int) $group_id;
 
@@ -331,77 +284,88 @@ class WP_User_Groups {
 			return false;
 		}
 
-		$wpdb->query(
-			$wpdb->prepare(
-				"INSERT IGNORE INTO {$wpdb->user_group_members} (group_id, user_id) VALUES (%d, %d)",
-				$group_id,
-				$user_id
-			)
-		);
+		$ids = self::get_user_group_ids( $user_id );
+		if ( in_array( $group_id, $ids, true ) ) {
+			return true;
+		}
 
-		self::invalidate_user_cache( $user_id );
+		$ids[] = $group_id;
+		update_user_meta( $user_id, self::USER_META_KEY, array_values( $ids ) );
 		return true;
 	}
 
 	public static function remove_user_from_group( $user_id, $group_id ) {
-		global $wpdb;
+		$user_id  = (int) $user_id;
+		$group_id = (int) $group_id;
 
-		$wpdb->delete(
-			$wpdb->user_group_members,
-			array(
-				'group_id' => (int) $group_id,
-				'user_id'  => (int) $user_id,
-			),
-			array( '%d', '%d' )
-		);
+		$ids = self::get_user_group_ids( $user_id );
+		$new = array_values( array_diff( $ids, array( $group_id ) ) );
 
-		self::invalidate_user_cache( (int) $user_id );
-		return true;
-	}
-
-	/**
-	 * Replace all of a user's group memberships at once.
-	 */
-	public static function set_user_groups( $user_id, array $group_ids ) {
-		global $wpdb;
-		$user_id = (int) $user_id;
-
-		$wpdb->delete( $wpdb->user_group_members, array( 'user_id' => $user_id ), array( '%d' ) );
-
-		$groups = self::get_all_groups();
-		foreach ( $group_ids as $group_id ) {
-			$group_id = (int) $group_id;
-			if ( ! isset( $groups[ $group_id ] ) ) {
-				continue;
-			}
-			$wpdb->insert(
-				$wpdb->user_group_members,
-				array(
-					'group_id' => $group_id,
-					'user_id'  => $user_id,
-				),
-				array( '%d', '%d' )
-			);
+		if ( count( $new ) === count( $ids ) ) {
+			return true;
 		}
 
-		self::invalidate_user_cache( $user_id );
+		if ( empty( $new ) ) {
+			delete_user_meta( $user_id, self::USER_META_KEY );
+		} else {
+			update_user_meta( $user_id, self::USER_META_KEY, $new );
+		}
+		return true;
+	}
+
+	public static function set_user_groups( $user_id, array $group_ids ) {
+		$user_id = (int) $user_id;
+		if ( ! $user_id ) {
+			return false;
+		}
+
+		$groups = self::get_all_groups();
+		$clean  = array();
+		foreach ( $group_ids as $id ) {
+			$id = (int) $id;
+			if ( $id > 0 && isset( $groups[ $id ] ) ) {
+				$clean[] = $id;
+			}
+		}
+		$clean = array_values( array_unique( $clean ) );
+
+		if ( empty( $clean ) ) {
+			delete_user_meta( $user_id, self::USER_META_KEY );
+		} else {
+			update_user_meta( $user_id, self::USER_META_KEY, $clean );
+		}
 		return true;
 	}
 
 	/**
-	 * @return int[]  User IDs.
+	 * User IDs that belong to a group.
+	 *
+	 * Uses the indexed meta_key lookup to find every user with *any* group
+	 * memberships, then filters in PHP. Each per-user get_user_meta is
+	 * served by the object cache on the hot path.
+	 *
+	 * @return int[]
 	 */
 	public static function get_group_members( $group_id ) {
 		global $wpdb;
-		return array_map(
-			'intval',
-			$wpdb->get_col(
-				$wpdb->prepare(
-					"SELECT user_id FROM {$wpdb->user_group_members} WHERE group_id = %d",
-					(int) $group_id
-				)
+		$group_id = (int) $group_id;
+
+		$user_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s",
+				self::USER_META_KEY
 			)
 		);
+
+		$members = array();
+		foreach ( $user_ids as $user_id ) {
+			$user_id = (int) $user_id;
+			$ids     = get_user_meta( $user_id, self::USER_META_KEY, true );
+			if ( is_array( $ids ) && in_array( $group_id, array_map( 'intval', $ids ), true ) ) {
+				$members[] = $user_id;
+			}
+		}
+		return $members;
 	}
 
 	/**
@@ -409,13 +373,26 @@ class WP_User_Groups {
 	 */
 	public static function count_members_per_group() {
 		global $wpdb;
-		$rows = $wpdb->get_results(
-			"SELECT group_id, COUNT(*) AS cnt FROM {$wpdb->user_group_members} GROUP BY group_id"
+
+		$rows = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = %s",
+				self::USER_META_KEY
+			)
 		);
+
 		$counts = array();
-		if ( $rows ) {
-			foreach ( $rows as $row ) {
-				$counts[ (int) $row->group_id ] = (int) $row->cnt;
+		foreach ( $rows as $row ) {
+			$ids = maybe_unserialize( $row );
+			if ( ! is_array( $ids ) ) {
+				continue;
+			}
+			foreach ( $ids as $id ) {
+				$id = (int) $id;
+				if ( $id <= 0 ) {
+					continue;
+				}
+				$counts[ $id ] = isset( $counts[ $id ] ) ? $counts[ $id ] + 1 : 1;
 			}
 		}
 		return $counts;
@@ -431,11 +408,6 @@ class WP_User_Groups {
 	public static function get_capabilities_from_groups( $user_id, $blog_id = null ) {
 		$user_id = (int) $user_id;
 		$blog_id = $blog_id ? (int) $blog_id : (int) get_current_blog_id();
-		$key     = $user_id . ':' . $blog_id;
-
-		if ( isset( self::$group_caps_cache[ $key ] ) ) {
-			return self::$group_caps_cache[ $key ];
-		}
 
 		$caps = array();
 		foreach ( self::get_user_groups( $user_id ) as $group_id => $group ) {
@@ -459,12 +431,11 @@ class WP_User_Groups {
 			$caps[ 'role-' . $group['role'] ] = true;
 		}
 
-		self::$group_caps_cache[ $key ] = $caps;
 		return $caps;
 	}
 
 	/* ------------------------------------------------------------------
-	 * WordPress filters
+	 * WordPress filters / actions
 	 * ---------------------------------------------------------------- */
 
 	public function filter_user_has_cap( $allcaps, $caps, $args, $user ) {
@@ -489,14 +460,13 @@ class WP_User_Groups {
 			if ( empty( $group['role'] ) ) {
 				continue;
 			}
-			$sites = self::get_group_sites( $group_id );
-			if ( empty( $sites ) ) {
+			if ( empty( $group['sites'] ) ) {
 				foreach ( get_sites( array( 'number' => 0, 'fields' => 'ids' ) ) as $id ) {
 					$site_ids[ (int) $id ] = true;
 				}
 				continue;
 			}
-			foreach ( $sites as $id ) {
+			foreach ( $group['sites'] as $id ) {
 				$site_ids[ (int) $id ] = true;
 			}
 		}
@@ -545,66 +515,108 @@ class WP_User_Groups {
 	}
 
 	public function on_user_deleted( $user_id ) {
-		global $wpdb;
-		$wpdb->delete( $wpdb->user_group_members, array( 'user_id' => (int) $user_id ), array( '%d' ) );
-		self::invalidate_user_cache( (int) $user_id );
+		delete_user_meta( (int) $user_id, self::USER_META_KEY );
 	}
 
 	public function on_site_deleted( $site ) {
-		global $wpdb;
-		$wpdb->delete( $wpdb->user_group_sites, array( 'blog_id' => (int) $site->blog_id ), array( '%d' ) );
-		self::$group_sites_cache = null;
-		self::$group_caps_cache  = array();
+		$blog_id = (int) $site->blog_id;
+		$groups  = self::get_all_groups();
+		$changed = false;
+
+		foreach ( $groups as $id => $group ) {
+			if ( empty( $group['sites'] ) ) {
+				continue;
+			}
+			$filtered = array_values( array_diff( $group['sites'], array( $blog_id ) ) );
+			if ( count( $filtered ) !== count( $group['sites'] ) ) {
+				$groups[ $id ]['sites'] = $filtered;
+				$changed                = true;
+			}
+		}
+
+		if ( $changed ) {
+			update_site_option( self::OPTION_KEY, $groups );
+		}
 	}
 
 	/* ------------------------------------------------------------------
 	 * Internal helpers
 	 * ---------------------------------------------------------------- */
 
-	private static function format_group( $row ) {
+	private static function normalise_group( $id, array $group ) {
 		return array(
-			'id'   => (int) $row->id,
-			'name' => $row->name,
-			'slug' => $row->slug,
-			'role' => $row->role,
+			'id'    => (int) $id,
+			'name'  => isset( $group['name'] ) ? (string) $group['name'] : '',
+			'slug'  => isset( $group['slug'] ) ? sanitize_title( $group['slug'] ) : '',
+			'role'  => isset( $group['role'] ) ? sanitize_key( $group['role'] ) : '',
+			'sites' => isset( $group['sites'] ) && is_array( $group['sites'] )
+				? array_values( array_unique( array_filter( array_map( 'intval', $group['sites'] ) ) ) )
+				: array(),
 		);
 	}
 
-	private static function unique_slug( $slug, $exclude_id = 0 ) {
-		global $wpdb;
+	private static function unique_slug( $slug, array $groups, $exclude_id = 0 ) {
 		$base = $slug;
 		$i    = 2;
 		while ( true ) {
-			$existing = $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT id FROM {$wpdb->user_groups} WHERE slug = %s AND id != %d",
-					$slug,
-					(int) $exclude_id
-				)
-			);
-			if ( ! $existing ) {
-				break;
+			$conflict = false;
+			foreach ( $groups as $other_id => $other ) {
+				if ( (int) $other_id === (int) $exclude_id ) {
+					continue;
+				}
+				if ( $other['slug'] === $slug ) {
+					$conflict = true;
+					break;
+				}
+			}
+			if ( ! $conflict ) {
+				return $slug;
 			}
 			$slug = $base . '-' . $i;
 			++$i;
 		}
-		return $slug;
 	}
 
-	private static function invalidate_user_cache( $user_id ) {
-		unset( self::$user_group_ids_cache[ $user_id ] );
-		$prefix = $user_id . ':';
-		foreach ( array_keys( self::$group_caps_cache ) as $key ) {
-			if ( 0 === strpos( (string) $key, $prefix ) ) {
-				unset( self::$group_caps_cache[ $key ] );
+	/**
+	 * Strip one group ID from every user's membership list.
+	 *
+	 * Relies on the meta_key index (ref lookup); per-user reads after the
+	 * first hit the object cache.
+	 */
+	private static function remove_group_from_all_users( $group_id ) {
+		global $wpdb;
+
+		$user_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s",
+				self::USER_META_KEY
+			)
+		);
+
+		foreach ( $user_ids as $user_id ) {
+			$user_id = (int) $user_id;
+			$ids     = get_user_meta( $user_id, self::USER_META_KEY, true );
+			if ( ! is_array( $ids ) ) {
+				continue;
+			}
+			$filtered = array_values( array_diff( array_map( 'intval', $ids ), array( $group_id ) ) );
+			if ( count( $filtered ) === count( $ids ) ) {
+				continue;
+			}
+			if ( empty( $filtered ) ) {
+				delete_user_meta( $user_id, self::USER_META_KEY );
+			} else {
+				update_user_meta( $user_id, self::USER_META_KEY, $filtered );
 			}
 		}
 	}
 
+	/**
+	 * Test helper. Storage is read through WordPress' own caches, which
+	 * WP_UnitTestCase flushes between tests, but we expose a hook for
+	 * tests that want to force a fresh read mid-test.
+	 */
 	public static function flush_all_caches() {
-		self::$groups_cache        = null;
-		self::$group_sites_cache   = null;
-		self::$user_group_ids_cache = array();
-		self::$group_caps_cache    = array();
+		wp_cache_delete( self::OPTION_KEY, is_multisite() ? 'site-options' : 'options' );
 	}
 }

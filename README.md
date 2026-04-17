@@ -19,22 +19,21 @@ WordPress roles and capabilities are per-site. On a large multisite network, gra
 
 - **Groups with roles.** Each group is associated with a WordPress role (editor, administrator, a custom role, or nothing).
 - **Runtime capability grants.** Access is granted through the `user_has_cap` filter, so removing a user from a group drops their access on the next request — no stale `{prefix}capabilities` usermeta to clean up.
-- **Multisite-native.** On multisite, group definitions and memberships live in global (`base_prefix`) tables, just like `wp_users` and `wp_usermeta`. No `switch_to_blog` juggling, no serialized blobs, no site-option indirection.
+- **Multisite-native.** Group definitions live in a single network-level site option; memberships live in `wp_usermeta`, which is global on multisite. No `switch_to_blog` juggling.
 - **Site scoping.** A group can apply to every site on the network (including sites added later) or a curated list of sites.
 - **Admin UI.** Users → Groups (single site) or Network Admin → Users → Groups (multisite). Per-user checkboxes on the Edit User screen. A "Groups" column on the Users list table.
 - **Cleans up after itself.** Deleting a group removes its memberships. Deleting a user drops their memberships. Deleting a site removes it from any group that targeted it.
 
 ## Data model
 
-Three global tables, all using `$wpdb->base_prefix`:
+Two WordPress primitives, both cached by the object cache:
 
-| Table | Purpose |
+| Storage | Purpose |
 |---|---|
-| `{prefix}user_groups` | Group definitions: `id`, `slug` (unique), `name`, `role` |
-| `{prefix}user_group_sites` | Which sites a group applies to. Empty list for a group = all sites. |
-| `{prefix}user_group_members` | `(group_id, user_id)` membership rows, indexed both ways |
+| `wp_user_groups` site option | Map of group ID → `{ id, name, slug, role, sites }`. `get_site_option()` is per-network on multisite, per-install on single site. |
+| `wp_user_groups` user meta | Array of group IDs the user belongs to. `wp_usermeta` is global on multisite, so a user's memberships follow them across sites. |
 
-This means "which groups is user X in?" and "which users are in group Y?" are both indexed primary-key lookups. No full-table scans, no (de)serialization.
+"Which groups is user X in?" is a single `get_user_meta()` call — served from the metadata cache after the first hit. "Which users are in group Y?" uses the indexed `meta_key` lookup on `wp_usermeta`.
 
 ## How access is granted
 
