@@ -4,5 +4,8 @@
 	"config": {
 		"WP_DEBUG": true,
 		"SCRIPT_DEBUG": true
+	},
+	"lifecycleScripts": {
+		"afterStart": "wp-env run cli wp eval-file wp-content/plugins/wp-user-groups/bin/seed.php"
 	}
 }

@@ -131,11 +131,15 @@ That spins up a WordPress instance at `http://localhost:8888` with this plugin a
 
 ### Seeding sample data
 
+`npm run start` automatically seeds the environment via wp-env's `afterStart` lifecycle hook: five groups (Meta Team, Content Editors, Support, Admin Team, Watchers) and eleven users (`alice`, `bob`, `carol`, ...) with overlapping memberships. Every seeded user shares the password `password`.
+
+Re-run the seed at any time with:
+
 ```bash
 npm run seed
 ```
 
-Creates five groups (Meta Team, Content Editors, Support, Admin Team, Watchers) and eleven users (`alice`, `bob`, `carol`, ...) with overlapping memberships. Every seeded user shares the password `password`. Re-running the command is safe — existing groups and users are reused and memberships are re-synced.
+The seed is idempotent — existing groups and users are reused, and memberships are re-synced.
 
 ### Running tests
 
