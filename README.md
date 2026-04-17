@@ -52,7 +52,8 @@ The user's actual `{prefix}capabilities` usermeta is never modified. This is wha
 1. Drop the `wp-user-groups` directory into `wp-content/plugins/`.
 2. Activate it.
    - On multisite, **network-activate** the plugin (it's marked `Network: true`).
-3. The three tables are created on activation and on plugin update.
+
+No schema changes are required. Group definitions live in a site option and memberships in `wp_usermeta`.
 
 ## Usage
 

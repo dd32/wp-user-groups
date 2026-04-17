@@ -72,14 +72,25 @@ class Test_Groups extends WP_UnitTestCase {
 		$this->assertSame( 'editor', $group['role'] );
 	}
 
-	public function test_update_group_duplicate_slug() {
+	public function test_update_group_duplicate_slug_is_auto_incremented() {
 		WP_User_Groups::create_group( 'A', 'taken' );
 		$id2 = WP_User_Groups::create_group( 'B', 'other' );
 
 		$result = WP_User_Groups::update_group( $id2, array( 'slug' => 'taken' ) );
 
-		$this->assertWPError( $result );
-		$this->assertSame( 'duplicate_slug', $result->get_error_code() );
+		$this->assertTrue( $result );
+		$group = WP_User_Groups::get_group( $id2 );
+		$this->assertSame( 'taken-2', $group['slug'] );
+	}
+
+	public function test_update_group_keeps_own_slug() {
+		$id = WP_User_Groups::create_group( 'Keeper', 'keeper' );
+
+		// Updating without changing the slug should not append a suffix to itself.
+		$result = WP_User_Groups::update_group( $id, array( 'slug' => 'keeper' ) );
+
+		$this->assertTrue( $result );
+		$this->assertSame( 'keeper', WP_User_Groups::get_group( $id )['slug'] );
 	}
 
 	public function test_update_nonexistent_group() {

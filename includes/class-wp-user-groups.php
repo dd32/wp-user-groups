@@ -26,6 +26,14 @@ class WP_User_Groups {
 
 	private static $instance;
 
+	/**
+	 * Per-request caches. Invalidated whenever a mutation happens so callers
+	 * never see stale data within a single request.
+	 */
+	private static $all_groups_cache = null;
+	private static $cap_cache        = array();
+	private static $count_cache      = null;
+
 	public static function instance() {
 		if ( ! isset( self::$instance ) ) {
 			self::$instance = new self();
@@ -54,9 +62,14 @@ class WP_User_Groups {
 	 * @return array<int, array{id:int,name:string,slug:string,role:string,sites:int[]}>
 	 */
 	public static function get_all_groups() {
+		if ( is_array( self::$all_groups_cache ) ) {
+			return self::$all_groups_cache;
+		}
+
 		$raw = get_site_option( self::OPTION_KEY, array() );
 		if ( ! is_array( $raw ) ) {
-			return array();
+			self::$all_groups_cache = array();
+			return self::$all_groups_cache;
 		}
 
 		$groups = array();
@@ -67,6 +80,8 @@ class WP_User_Groups {
 			}
 			$groups[ $id ] = self::normalise_group( $id, $group );
 		}
+
+		self::$all_groups_cache = $groups;
 		return $groups;
 	}
 
@@ -118,11 +133,14 @@ class WP_User_Groups {
 			)
 		);
 
-		update_site_option( self::OPTION_KEY, $groups );
+		self::save_groups( $groups );
 		return $next_id;
 	}
 
 	/**
+	 * Update fields on an existing group. Duplicate slugs are resolved by
+	 * appending a numeric suffix, matching the behaviour of `create_group`.
+	 *
 	 * @return true|WP_Error
 	 */
 	public static function update_group( $group_id, array $data ) {
@@ -148,12 +166,7 @@ class WP_User_Groups {
 			if ( '' === $slug ) {
 				$slug = 'group';
 			}
-			foreach ( $groups as $other_id => $other ) {
-				if ( $other_id !== $group_id && $other['slug'] === $slug ) {
-					return new WP_Error( 'duplicate_slug', __( 'That slug is already in use.', 'wp-user-groups' ) );
-				}
-			}
-			$group['slug'] = $slug;
+			$group['slug'] = self::unique_slug( $slug, $groups, $group_id );
 		}
 
 		if ( isset( $data['role'] ) ) {
@@ -165,7 +178,7 @@ class WP_User_Groups {
 		}
 
 		$groups[ $group_id ] = self::normalise_group( $group_id, $group );
-		update_site_option( self::OPTION_KEY, $groups );
+		self::save_groups( $groups );
 		return true;
 	}
 
@@ -178,7 +191,7 @@ class WP_User_Groups {
 		}
 
 		unset( $groups[ $group_id ] );
-		update_site_option( self::OPTION_KEY, $groups );
+		self::save_groups( $groups );
 
 		self::remove_group_from_all_users( $group_id );
 		return true;
@@ -211,7 +224,7 @@ class WP_User_Groups {
 			array_unique( array_filter( array_map( 'intval', $blog_ids ) ) )
 		);
 
-		update_site_option( self::OPTION_KEY, $groups );
+		self::save_groups( $groups );
 		return true;
 	}
 
@@ -291,6 +304,7 @@ class WP_User_Groups {
 
 		$ids[] = $group_id;
 		update_user_meta( $user_id, self::USER_META_KEY, array_values( $ids ) );
+		self::invalidate_membership_caches();
 		return true;
 	}
 
@@ -310,6 +324,7 @@ class WP_User_Groups {
 		} else {
 			update_user_meta( $user_id, self::USER_META_KEY, $new );
 		}
+		self::invalidate_membership_caches();
 		return true;
 	}
 
@@ -334,26 +349,33 @@ class WP_User_Groups {
 		} else {
 			update_user_meta( $user_id, self::USER_META_KEY, $clean );
 		}
+		self::invalidate_membership_caches();
 		return true;
 	}
 
 	/**
 	 * User IDs that belong to a group.
 	 *
-	 * Uses the indexed meta_key lookup to find every user with *any* group
-	 * memberships, then filters in PHP. Each per-user get_user_meta is
-	 * served by the object cache on the hot path.
+	 * Prefilters the usermeta scan with a LIKE on the serialized `i:<id>;`
+	 * token so we only load metadata for users who plausibly belong. LIKE
+	 * may collide with serialized array keys, so we still verify in PHP.
 	 *
 	 * @return int[]
 	 */
 	public static function get_group_members( $group_id ) {
 		global $wpdb;
 		$group_id = (int) $group_id;
+		if ( $group_id <= 0 ) {
+			return array();
+		}
+
+		$needle = 'i:' . $group_id . ';';
 
 		$user_ids = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s",
-				self::USER_META_KEY
+				"SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s AND meta_value LIKE %s",
+				self::USER_META_KEY,
+				'%' . $wpdb->esc_like( $needle ) . '%'
 			)
 		);
 
@@ -372,6 +394,10 @@ class WP_User_Groups {
 	 * @return array<int, int>  group_id => member count
 	 */
 	public static function count_members_per_group() {
+		if ( is_array( self::$count_cache ) ) {
+			return self::$count_cache;
+		}
+
 		global $wpdb;
 
 		$rows = $wpdb->get_col(
@@ -395,6 +421,8 @@ class WP_User_Groups {
 				$counts[ $id ] = isset( $counts[ $id ] ) ? $counts[ $id ] + 1 : 1;
 			}
 		}
+
+		self::$count_cache = $counts;
 		return $counts;
 	}
 
@@ -438,11 +466,24 @@ class WP_User_Groups {
 	 * WordPress filters / actions
 	 * ---------------------------------------------------------------- */
 
+	/**
+	 * `user_has_cap` fires on every `current_user_can()` call, so the merged
+	 * group cap set is memoized per (user, blog) for the duration of the
+	 * request. Mutations call `invalidate_membership_caches()` to bust it.
+	 */
 	public function filter_user_has_cap( $allcaps, $caps, $args, $user ) {
 		if ( ! $user instanceof WP_User || ! $user->ID ) {
 			return $allcaps;
 		}
-		$group_caps = self::get_capabilities_from_groups( $user->ID );
+
+		$blog_id = (int) get_current_blog_id();
+		$key     = $user->ID . ':' . $blog_id;
+
+		if ( ! isset( self::$cap_cache[ $key ] ) ) {
+			self::$cap_cache[ $key ] = self::get_capabilities_from_groups( $user->ID, $blog_id );
+		}
+
+		$group_caps = self::$cap_cache[ $key ];
 		if ( empty( $group_caps ) ) {
 			return $allcaps;
 		}
@@ -455,18 +496,27 @@ class WP_User_Groups {
 			return $blogs;
 		}
 
-		$site_ids = array();
-		foreach ( $user_groups as $group_id => $group ) {
+		$has_all_sites_group = false;
+		$site_ids            = array();
+		foreach ( $user_groups as $group ) {
 			if ( empty( $group['role'] ) ) {
 				continue;
 			}
 			if ( empty( $group['sites'] ) ) {
-				foreach ( get_sites( array( 'number' => 0, 'fields' => 'ids' ) ) as $id ) {
-					$site_ids[ (int) $id ] = true;
-				}
+				$has_all_sites_group = true;
 				continue;
 			}
 			foreach ( $group['sites'] as $id ) {
+				$site_ids[ (int) $id ] = true;
+			}
+		}
+
+		if ( ! $has_all_sites_group && empty( $site_ids ) ) {
+			return $blogs;
+		}
+
+		if ( $has_all_sites_group ) {
+			foreach ( get_sites( array( 'number' => 0, 'fields' => 'ids' ) ) as $id ) {
 				$site_ids[ (int) $id ] = true;
 			}
 		}
@@ -516,6 +566,7 @@ class WP_User_Groups {
 
 	public function on_user_deleted( $user_id ) {
 		delete_user_meta( (int) $user_id, self::USER_META_KEY );
+		self::invalidate_membership_caches();
 	}
 
 	public function on_site_deleted( $site ) {
@@ -535,7 +586,7 @@ class WP_User_Groups {
 		}
 
 		if ( $changed ) {
-			update_site_option( self::OPTION_KEY, $groups );
+			self::save_groups( $groups );
 		}
 	}
 
@@ -578,6 +629,20 @@ class WP_User_Groups {
 	}
 
 	/**
+	 * Persist the groups option and invalidate anything derived from it.
+	 */
+	private static function save_groups( array $groups ) {
+		update_site_option( self::OPTION_KEY, $groups );
+		self::$all_groups_cache = null;
+		self::$cap_cache        = array();
+	}
+
+	private static function invalidate_membership_caches() {
+		self::$cap_cache   = array();
+		self::$count_cache = null;
+	}
+
+	/**
 	 * Strip one group ID from every user's membership list.
 	 *
 	 * Relies on the meta_key index (ref lookup); per-user reads after the
@@ -586,10 +651,13 @@ class WP_User_Groups {
 	private static function remove_group_from_all_users( $group_id ) {
 		global $wpdb;
 
+		$needle = 'i:' . (int) $group_id . ';';
+
 		$user_ids = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s",
-				self::USER_META_KEY
+				"SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s AND meta_value LIKE %s",
+				self::USER_META_KEY,
+				'%' . $wpdb->esc_like( $needle ) . '%'
 			)
 		);
 
@@ -609,14 +677,21 @@ class WP_User_Groups {
 				update_user_meta( $user_id, self::USER_META_KEY, $filtered );
 			}
 		}
+
+		self::invalidate_membership_caches();
 	}
 
 	/**
-	 * Test helper. Storage is read through WordPress' own caches, which
-	 * WP_UnitTestCase flushes between tests, but we expose a hook for
-	 * tests that want to force a fresh read mid-test.
+	 * Test helper. Flushes the option cache and our per-request caches so a
+	 * test can force a fresh read mid-run. No-op outside the PHPUnit harness.
 	 */
 	public static function flush_all_caches() {
+		if ( ! defined( 'WP_TESTS_DOMAIN' ) ) {
+			return;
+		}
 		wp_cache_delete( self::OPTION_KEY, is_multisite() ? 'site-options' : 'options' );
+		self::$all_groups_cache = null;
+		self::$cap_cache        = array();
+		self::$count_cache      = null;
 	}
 }
