@@ -5,6 +5,7 @@
 		"wp-env": "wp-env",
 		"start": "wp-env start",
 		"stop": "wp-env stop",
+		"seed": "wp-env run cli wp eval-file wp-content/plugins/wp-user-groups/bin/seed.php",
 		"test": "wp-env run tests-cli -- phpunit -c /var/www/html/wp-content/plugins/wp-user-groups/phpunit.xml.dist",
 		"test:multisite": "wp-env run tests-cli -- phpunit -c /var/www/html/wp-content/plugins/wp-user-groups/phpunit-multisite.xml.dist"
 	},

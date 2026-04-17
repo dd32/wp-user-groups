@@ -129,6 +129,14 @@ npm run start
 
 That spins up a WordPress instance at `http://localhost:8888` with this plugin active.
 
+### Seeding sample data
+
+```bash
+npm run seed
+```
+
+Creates five groups (Meta Team, Content Editors, Support, Admin Team, Watchers) and eleven users (`alice`, `bob`, `carol`, ...) with overlapping memberships. Every seeded user shares the password `password`. Re-running the command is safe — existing groups and users are reused and memberships are re-synced.
+
 ### Running tests
 
 ```bash
