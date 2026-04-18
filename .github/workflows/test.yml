@@ -33,6 +33,9 @@ jobs:
       - name: Start WordPress environment
         run: npm run start
 
+      - name: Install Composer dev dependencies (PHPUnit Polyfills)
+        run: npm run composer -- install
+
       - name: Run tests (single-site)
         run: npm run test
 

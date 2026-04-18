@@ -1,12 +1,14 @@
 {
-	"name": "wp-user-groups",
+	"name": "wp-user-teams",
 	"private": true,
 	"scripts": {
 		"wp-env": "wp-env",
 		"start": "wp-env start",
 		"stop": "wp-env stop",
-		"test": "wp-env run tests-cli -- phpunit -c /var/www/html/wp-content/plugins/wp-user-groups/phpunit.xml.dist",
-		"test:multisite": "wp-env run tests-cli -- phpunit -c /var/www/html/wp-content/plugins/wp-user-groups/phpunit-multisite.xml.dist"
+		"postinstall": "node scripts/patch-wp-env.js",
+		"composer": "wp-env run tests-cli --env-cwd=wp-content/plugins/wp-user-teams composer",
+		"test": "wp-env run tests-cli --env-cwd=wp-content/plugins/wp-user-teams -- ./vendor/bin/phpunit -c phpunit.xml.dist",
+		"test:multisite": "wp-env run tests-cli --env-cwd=wp-content/plugins/wp-user-teams -- ./vendor/bin/phpunit -c phpunit-multisite.xml.dist"
 	},
 	"devDependencies": {
 		"@wordpress/env": "^10.0.0"
