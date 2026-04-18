@@ -5,8 +5,13 @@
 	colors="true"
 >
 	<testsuites>
-		<testsuite name="user-groups">
-			<directory suffix=".php">tests</directory>
+		<testsuite name="user-teams">
+			<file>tests/Test_Teams.php</file>
+			<file>tests/Test_Membership.php</file>
+			<file>tests/Test_Capabilities.php</file>
+			<file>tests/Test_Multisite.php</file>
+			<file>tests/Test_Admin.php</file>
+			<file>tests/Test_User_Query.php</file>
 		</testsuite>
 	</testsuites>
 </phpunit>
