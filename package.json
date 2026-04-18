@@ -7,8 +7,7 @@
 		"stop": "wp-env stop",
 		"postinstall": "node scripts/patch-wp-env.js",
 		"composer": "wp-env run tests-cli --env-cwd=wp-content/plugins/wp-user-teams composer",
-		"test": "wp-env run tests-cli --env-cwd=wp-content/plugins/wp-user-teams -- ./vendor/bin/phpunit -c phpunit.xml.dist",
-		"test:multisite": "wp-env run tests-cli --env-cwd=wp-content/plugins/wp-user-teams -- ./vendor/bin/phpunit -c phpunit-multisite.xml.dist"
+		"test": "wp-env run tests-cli --env-cwd=wp-content/plugins/wp-user-teams -- ./vendor/bin/phpunit -c phpunit.xml.dist"
 	},
 	"devDependencies": {
 		"@wordpress/env": "^11.0.0"

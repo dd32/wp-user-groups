@@ -25,67 +25,49 @@ class WP_User_Teams_Admin {
 	}
 
 	private function __construct() {
-		if ( is_multisite() ) {
-			add_action( 'network_admin_menu', array( $this, 'register_network_menu' ) );
-		} else {
-			add_action( 'admin_menu', array( $this, 'register_menu' ) );
-		}
+		// Teams are a network-wide concept — management lives in
+		// Network Admin → Users → Teams.
+		add_action( 'network_admin_menu', array( $this, 'register_network_menu' ) );
 
 		add_action( 'admin_post_wp_user_teams_save', array( $this, 'handle_save' ) );
 		add_action( 'admin_post_wp_user_teams_delete', array( $this, 'handle_delete' ) );
 		add_action( 'admin_post_wp_user_teams_add_site', array( $this, 'handle_add_site' ) );
 		add_action( 'admin_post_wp_user_teams_remove_site', array( $this, 'handle_remove_site' ) );
+		add_action( 'admin_post_wp_user_teams_attach_site', array( $this, 'handle_attach_team_to_site' ) );
 
 		add_action( 'show_user_profile', array( $this, 'render_user_field' ) );
 		add_action( 'edit_user_profile', array( $this, 'render_user_field' ) );
 		add_action( 'personal_options_update', array( $this, 'save_user_field' ) );
 		add_action( 'edit_user_profile_update', array( $this, 'save_user_field' ) );
 
-		// Add-new-user screen (wp-admin/user-new.php):
-		//   • single-site: team checkboxes to assign the new user to teams.
-		//     Rendered inside the user form via `user_new_form`.
-		//   • multisite per-site: "Add a Team to This Site" is its own
-		//     form — nesting it inside user-new.php's forms would hijack
-		//     the outer submit — so it's rendered via `admin_notices`
-		//     which fires before the user forms open.
-		if ( ! is_multisite() ) {
-			add_action( 'user_new_form', array( $this, 'render_user_team_picker_section_gate' ) );
-		} else {
-			add_action( 'admin_notices', array( $this, 'render_user_new_notice' ) );
-			add_action( 'admin_notices', array( $this, 'maybe_render_add_team_to_site_section' ) );
-		}
-		add_action( 'edit_user_created_user', array( $this, 'save_new_user_field' ), 10, 1 );
-		add_action( 'admin_post_wp_user_teams_attach_site', array( $this, 'handle_attach_team_to_site' ) );
+		// Per-site user-new.php: "Add a Team to This Site" is its own
+		// form — nesting it inside user-new.php's forms would hijack
+		// the outer submit — so it's rendered via `admin_notices`
+		// which fires before the user forms open.
+		add_action( 'admin_notices', array( $this, 'render_user_new_notice' ) );
+		add_action( 'admin_notices', array( $this, 'maybe_render_add_team_to_site_section' ) );
 
-		// "Teams" column placement:
-		//   • single-site Users → useful (shows team memberships).
-		//   • multisite per-site Users → dropped; `get_role_list` already
-		//     discloses team-derived roles in the Role column.
-		//   • Network admin Users → included (the Role column is absent here).
-		if ( is_multisite() ) {
-			add_filter( 'manage_users-network_columns', array( $this, 'add_users_column' ) );
-		} else {
-			add_filter( 'manage_users_columns', array( $this, 'add_users_column' ) );
-		}
+		// "Teams" column appears on Network Admin → Users. Per-site
+		// users.php keeps only the "Role (via Team)" disclosure via
+		// `get_role_list` — no redundant column there.
+		add_filter( 'manage_users-network_columns', array( $this, 'add_users_column' ) );
 		add_filter( 'manage_users_custom_column', array( $this, 'render_users_column' ), 10, 3 );
 
-		// Disclose team-derived roles alongside the user's own role(s) in
-		// wp-admin/users.php. Filter exists since WP 6.2.
+		// Disclose team-derived roles alongside the user's own role(s)
+		// in wp-admin/users.php. Filter exists since WP 6.2.
 		add_filter( 'get_role_list', array( $this, 'disclose_team_roles_in_users_list' ), 10, 2 );
 
-		// Team filter on the Users list tables (single-site and network).
+		// Team filter on the Users list tables.
 		add_filter( 'views_users', array( $this, 'filter_user_views' ) );
 		add_filter( 'views_users-network', array( $this, 'filter_user_views' ) );
 		add_action( 'pre_get_users', array( $this, 'apply_team_filter_to_query' ) );
 
-		// Multisite per-site Users screen: render a collapsible "Teams
-		// covering this site" table above the list, and include team
-		// members in the main Users list even without native capabilities
-		// meta for this blog.
-		if ( is_multisite() ) {
-			add_action( 'admin_notices', array( $this, 'render_site_team_coverage_table' ) );
-			add_action( 'pre_user_query', array( $this, 'include_team_members_in_user_query' ) );
-		}
+		// Per-site Users screen: render a "Teams covering this site"
+		// table as styled first-rows in #the-list, and include team
+		// members in the main list even when they lack native caps
+		// meta for the current blog.
+		add_action( 'admin_notices', array( $this, 'render_site_team_coverage_table' ) );
+		add_action( 'pre_user_query', array( $this, 'include_team_members_in_user_query' ) );
 	}
 
 	/* ------------------------------------------------------------------
@@ -93,7 +75,7 @@ class WP_User_Teams_Admin {
 	 * ---------------------------------------------------------------- */
 
 	public static function required_cap() {
-		return is_multisite() ? 'manage_network_users' : 'promote_users';
+		return 'manage_network_users';
 	}
 
 	private function current_user_can_manage() {
@@ -103,16 +85,6 @@ class WP_User_Teams_Admin {
 	/* ------------------------------------------------------------------
 	 * Menu registration
 	 * ---------------------------------------------------------------- */
-
-	public function register_menu() {
-		add_users_page(
-			__( 'User Teams', 'wp-user-teams' ),
-			__( 'Teams', 'wp-user-teams' ),
-			self::required_cap(),
-			self::PAGE_SLUG,
-			array( $this, 'render_page' )
-		);
-	}
 
 	public function register_network_menu() {
 		add_submenu_page(
@@ -176,9 +148,7 @@ class WP_User_Teams_Admin {
 						<th scope="col"><?php esc_html_e( 'Name', 'wp-user-teams' ); ?></th>
 						<th scope="col"><?php esc_html_e( 'Slug', 'wp-user-teams' ); ?></th>
 						<th scope="col"><?php esc_html_e( 'Role', 'wp-user-teams' ); ?></th>
-						<?php if ( is_multisite() ) : ?>
-							<th scope="col"><?php esc_html_e( 'Sites', 'wp-user-teams' ); ?></th>
-						<?php endif; ?>
+						<th scope="col"><?php esc_html_e( 'Sites', 'wp-user-teams' ); ?></th>
 						<th scope="col"><?php esc_html_e( 'Members', 'wp-user-teams' ); ?></th>
 					</tr>
 				</thead>
@@ -197,8 +167,8 @@ class WP_User_Teams_Admin {
 						),
 						self::NONCE_ACTION
 					);
-					$sites        = is_multisite() ? WP_User_Teams::get_team_sites( $team['id'] ) : array();
-					$member_count = isset( $counts[ $team['id'] ] ) ? $counts[ $team['id'] ] : 0;
+					$sites        = WP_User_Teams::get_team_sites( $team['id'] );
+					$member_count = $counts[ $team['id'] ] ?? 0;
 				?>
 					<tr>
 						<td>
@@ -221,31 +191,29 @@ class WP_User_Teams_Admin {
 							}
 							?>
 						</td>
-						<?php if ( is_multisite() ) : ?>
-							<td>
-								<?php
-								$has_global = ! empty( $team['role'] );
-								$explicit   = count( $sites );
-								if ( $has_global && 0 === $explicit ) {
-									esc_html_e( 'All sites (via Global Role)', 'wp-user-teams' );
-								} elseif ( $has_global && $explicit > 0 ) {
-									echo esc_html( sprintf(
-										/* translators: %s: number of per-site overrides */
-										_n( 'All sites — %s with specific role', 'All sites — %s with specific roles', $explicit, 'wp-user-teams' ),
-										number_format_i18n( $explicit )
-									) );
-								} elseif ( ! $has_global && $explicit > 0 ) {
-									echo esc_html( sprintf(
-										/* translators: %s: number of sites */
-										_n( '%s site', '%s sites', $explicit, 'wp-user-teams' ),
-										number_format_i18n( $explicit )
-									) );
-								} else {
-									echo '&mdash;';
-								}
-								?>
-							</td>
-						<?php endif; ?>
+						<td>
+							<?php
+							$has_global = ! empty( $team['role'] );
+							$explicit   = count( $sites );
+							if ( $has_global && 0 === $explicit ) {
+								esc_html_e( 'All sites (via Global Role)', 'wp-user-teams' );
+							} elseif ( $has_global && $explicit > 0 ) {
+								echo esc_html( sprintf(
+									/* translators: %s: number of per-site overrides */
+									_n( 'All sites — %s with specific role', 'All sites — %s with specific roles', $explicit, 'wp-user-teams' ),
+									number_format_i18n( $explicit )
+								) );
+							} elseif ( ! $has_global && $explicit > 0 ) {
+								echo esc_html( sprintf(
+									/* translators: %s: number of sites */
+									_n( '%s site', '%s sites', $explicit, 'wp-user-teams' ),
+									number_format_i18n( $explicit )
+								) );
+							} else {
+								echo '&mdash;';
+							}
+							?>
+						</td>
 						<td><?php echo esc_html( number_format_i18n( $member_count ) ); ?></td>
 					</tr>
 				<?php endforeach; ?>
@@ -271,9 +239,8 @@ class WP_User_Teams_Admin {
 			}
 		}
 
-		$current_role        = $team ? $team['role'] : '';
-		$current_site_roles  = ( $team && is_multisite() ) ? WP_User_Teams::get_team_site_roles( $team['id'] ) : array();
-		$back_url            = $this->page_url();
+		$current_role = $team ? $team['role'] : '';
+		$back_url     = $this->page_url();
 		?>
 		<div class="wrap">
 			<h1>
@@ -337,7 +304,7 @@ class WP_User_Teams_Admin {
 				<a href="<?php echo esc_url( $back_url ); ?>" class="button button-secondary"><?php esc_html_e( 'Back to teams', 'wp-user-teams' ); ?></a>
 			</form>
 
-			<?php if ( $team && is_multisite() ) : ?>
+			<?php if ( $team ) : ?>
 				<?php $this->render_team_sites_section( $team ); ?>
 			<?php endif; ?>
 		</div>
@@ -575,18 +542,6 @@ class WP_User_Teams_Admin {
 	 * Gatekeeper for the single-site team-picker hook — wraps the render
 	 * in the single-site permission check.
 	 */
-	public function render_user_team_picker_section_gate( $context = '' ) {
-		if ( ! $this->current_user_can_manage() ) {
-			return;
-		}
-		$this->render_user_team_picker_section();
-	}
-
-	/**
-	 * `admin_notices` handler: on multisite user-new.php only, renders
-	 * the "Add a Team to This Site" form above the user forms so its
-	 * submit isn't intercepted by the outer <form> wrapper.
-	 */
 	/**
 	 * Displays the success/error notice set by
 	 * `handle_attach_team_to_site` when it redirects back to user-new.php.
@@ -633,49 +588,10 @@ class WP_User_Teams_Admin {
 		if ( ! $screen || 'user' !== $screen->base ) {
 			return; // Per-site user-new.php only.
 		}
-		if ( ! is_multisite() ) {
-			return;
-		}
 		if ( ! current_user_can( 'promote_users' ) ) {
 			return;
 		}
 		$this->render_add_team_to_site_section();
-	}
-
-	private function render_user_team_picker_section() {
-		$teams = WP_User_Teams::get_all_teams();
-		if ( empty( $teams ) ) {
-			return;
-		}
-
-		$selected   = isset( $_POST['wput_teams'] ) && is_array( $_POST['wput_teams'] )
-			? array_map( 'intval', wp_unslash( $_POST['wput_teams'] ) )
-			: array();
-		$role_names = wp_roles()->get_names();
-		?>
-		<h2><?php esc_html_e( 'User Teams', 'wp-user-teams' ); ?></h2>
-		<table class="form-table" role="presentation">
-			<tr>
-				<th scope="row"><?php esc_html_e( 'Teams', 'wp-user-teams' ); ?></th>
-				<td>
-					<?php wp_nonce_field( self::USER_NONCE, 'wput_user_nonce', false ); ?>
-					<fieldset>
-						<legend class="screen-reader-text"><?php esc_html_e( 'User Teams', 'wp-user-teams' ); ?></legend>
-						<?php foreach ( $teams as $team ) : ?>
-							<label style="display:block;margin-bottom:0.25em;">
-								<input type="checkbox" name="wput_teams[]" value="<?php echo (int) $team['id']; ?>" <?php checked( in_array( $team['id'], $selected, true ) ); ?> />
-								<strong><?php echo esc_html( $team['name'] ); ?></strong>
-								<?php if ( $team['role'] && isset( $role_names[ $team['role'] ] ) ) : ?>
-									<span style="color:#646970;">— <?php echo esc_html( translate_user_role( $role_names[ $team['role'] ] ) ); ?></span>
-								<?php endif; ?>
-							</label>
-						<?php endforeach; ?>
-					</fieldset>
-					<p class="description"><?php esc_html_e( "Membership grants the team's role in addition to the user's role on this site.", 'wp-user-teams' ); ?></p>
-				</td>
-			</tr>
-		</table>
-		<?php
 	}
 
 	/**
@@ -761,31 +677,6 @@ class WP_User_Teams_Admin {
 	}
 
 	/**
-	 * Captures team selection when a user is created via the single-site
-	 * Add New User form.
-	 *
-	 * @param int $user_id ID of the newly created user.
-	 */
-	public function save_new_user_field( $user_id ) {
-		if ( is_multisite() ) {
-			return; // Team picker is not shown on multisite add-user form.
-		}
-		$user_id = (int) $user_id;
-		if ( ! $user_id || ! $this->current_user_can_manage() ) {
-			return;
-		}
-		if ( empty( $_POST['wput_user_nonce'] ) || ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['wput_user_nonce'] ) ), self::USER_NONCE ) ) {
-			return;
-		}
-
-		$submitted = ( isset( $_POST['wput_teams'] ) && is_array( $_POST['wput_teams'] ) )
-			? array_map( 'intval', wp_unslash( $_POST['wput_teams'] ) )
-			: array();
-
-		WP_User_Teams::set_user_teams( $user_id, $submitted );
-	}
-
-	/**
 	 * `admin-post.php` handler for "Add Team to This Site".
 	 *
 	 * Extends the target team's `sites` list to include the current blog.
@@ -852,10 +743,6 @@ class WP_User_Teams_Admin {
 
 	public function handle_attach_team_to_site() {
 		check_admin_referer( self::NONCE_ACTION );
-
-		if ( ! is_multisite() ) {
-			wp_die( esc_html__( 'This action is only available on multisite.', 'wp-user-teams' ) );
-		}
 
 		$team_id = (int) ( $_POST['team_id'] ?? 0 );
 		$blog_id = (int) ( $_POST['blog_id'] ?? get_current_blog_id() );
@@ -949,7 +836,7 @@ class WP_User_Teams_Admin {
 
 		$team_entries = array();
 		foreach ( WP_User_Teams::get_user_teams( $user->ID ) as $team_id => $team ) {
-			if ( is_multisite() && ! WP_User_Teams::team_applies_to_site( $team_id, $blog_id ) ) {
+			if ( ! WP_User_Teams::team_applies_to_site( $team_id, $blog_id ) ) {
 				continue;
 			}
 			$role_slug = WP_User_Teams::resolve_role_for_site( $team, $blog_id );
@@ -1012,7 +899,7 @@ class WP_User_Teams_Admin {
 			if ( 0 === $count ) {
 				continue; // Empty team — nothing to filter to.
 			}
-			if ( $is_site_list && is_multisite() && ! WP_User_Teams::team_applies_to_site( $team['id'], $blog_id ) ) {
+			if ( $is_site_list && ! WP_User_Teams::team_applies_to_site( $team['id'], $blog_id ) ) {
 				continue; // Team doesn't cover this site.
 			}
 
@@ -1043,10 +930,6 @@ class WP_User_Teams_Admin {
 	 * @param WP_User_Query $query
 	 */
 	public function include_team_members_in_user_query( $query ) {
-		if ( ! is_multisite() ) {
-			return;
-		}
-
 		$blog_id = (int) $query->get( 'blog_id' );
 		if ( $blog_id <= 0 ) {
 			return;
@@ -1245,7 +1128,7 @@ class WP_User_Teams_Admin {
 	 */
 	public function render_site_team_coverage_table() {
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		if ( ! $screen || 'users' !== $screen->base || ! is_multisite() ) {
+		if ( ! $screen || 'users' !== $screen->base ) {
 			return;
 		}
 

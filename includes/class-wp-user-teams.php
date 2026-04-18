@@ -36,12 +36,9 @@ class WP_User_Teams {
 	private function __construct() {
 		add_filter( 'user_has_cap', array( $this, 'filter_user_has_cap' ), 10, 4 );
 		add_action( 'deleted_user', array( $this, 'on_user_deleted' ) );
-
-		if ( is_multisite() ) {
-			add_filter( 'get_blogs_of_user', array( $this, 'filter_get_blogs_of_user' ), 10, 3 );
-			add_filter( 'get_user_metadata', array( $this, 'filter_get_user_metadata' ), 10, 3 );
-			add_action( 'wp_delete_site', array( $this, 'on_site_deleted' ) );
-		}
+		add_filter( 'get_blogs_of_user', array( $this, 'filter_get_blogs_of_user' ), 10, 3 );
+		add_filter( 'get_user_metadata', array( $this, 'filter_get_user_metadata' ), 10, 3 );
+		add_action( 'wp_delete_site', array( $this, 'on_site_deleted' ) );
 	}
 
 	/* ------------------------------------------------------------------
@@ -254,9 +251,6 @@ class WP_User_Teams {
 	 * - The site has an explicit per-site role grant.
 	 */
 	public static function team_applies_to_site( $team_id, $blog_id = null ) {
-		if ( ! is_multisite() ) {
-			return true;
-		}
 		$team = self::get_team( $team_id );
 		if ( ! $team ) {
 			return false;
@@ -754,6 +748,6 @@ class WP_User_Teams {
 	 * tests that want to force a fresh read mid-test.
 	 */
 	public static function flush_all_caches() {
-		wp_cache_delete( self::OPTION_KEY, is_multisite() ? 'site-options' : 'options' );
+		wp_cache_delete( self::OPTION_KEY, 'site-options' );
 	}
 }

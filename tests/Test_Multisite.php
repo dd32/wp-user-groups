@@ -8,11 +8,6 @@ class Test_Multisite extends WP_UnitTestCase {
 
 	public function set_up() {
 		parent::set_up();
-
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Multisite is not enabled.' );
-		}
-
 		WP_User_Teams::flush_all_caches();
 	}
 

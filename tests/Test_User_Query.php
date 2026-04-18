@@ -30,9 +30,6 @@ class Test_User_Query extends WP_UnitTestCase {
 	 * ---------------------------------------------------------------- */
 
 	public function test_query_includes_team_members_without_native_caps_meta() {
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Multisite only.' );
-		}
 
 		$blog2 = self::factory()->blog->create();
 		$tid   = WP_User_Teams::create_team( 'Q', 'q', '' );
@@ -48,9 +45,6 @@ class Test_User_Query extends WP_UnitTestCase {
 	}
 
 	public function test_query_does_not_duplicate_team_members() {
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Multisite only.' );
-		}
 
 		$blog2 = self::factory()->blog->create();
 		$tid   = WP_User_Teams::create_team( 'Dedupe', 'dedupe', '' );
@@ -72,9 +66,6 @@ class Test_User_Query extends WP_UnitTestCase {
 	}
 
 	public function test_query_without_team_members_is_unchanged() {
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Multisite only.' );
-		}
 
 		$blog2 = self::factory()->blog->create();
 
@@ -163,9 +154,6 @@ class Test_User_Query extends WP_UnitTestCase {
 	}
 
 	public function test_views_filter_hides_teams_that_dont_cover_current_site() {
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Multisite only.' );
-		}
 
 		$blog2 = self::factory()->blog->create();
 		$blog3 = self::factory()->blog->create();
@@ -203,9 +191,6 @@ class Test_User_Query extends WP_UnitTestCase {
 	 * ---------------------------------------------------------------- */
 
 	public function test_search_finds_team_member_without_native_caps() {
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Multisite only.' );
-		}
 
 		$blog2 = self::factory()->blog->create();
 		$tid   = WP_User_Teams::create_team( 'Searchable', 'searchable', '' );
@@ -228,9 +213,6 @@ class Test_User_Query extends WP_UnitTestCase {
 	}
 
 	public function test_search_no_matches_returns_empty() {
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Multisite only.' );
-		}
 
 		$blog2 = self::factory()->blog->create();
 		$tid   = WP_User_Teams::create_team( 'None', 'nomatch', '' );
@@ -253,9 +235,6 @@ class Test_User_Query extends WP_UnitTestCase {
 	 * ---------------------------------------------------------------- */
 
 	public function test_role_filter_includes_team_members_with_matching_team_role() {
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Multisite only.' );
-		}
 
 		$blog2 = self::factory()->blog->create();
 		$tid   = WP_User_Teams::create_team( 'RoleMatch', 'role-match', '' );
@@ -274,9 +253,6 @@ class Test_User_Query extends WP_UnitTestCase {
 	}
 
 	public function test_role_filter_excludes_team_members_with_different_role() {
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Multisite only.' );
-		}
 
 		$blog2 = self::factory()->blog->create();
 		$tid   = WP_User_Teams::create_team( 'WrongRole', 'wrong-role', '' );
@@ -295,9 +271,6 @@ class Test_User_Query extends WP_UnitTestCase {
 	}
 
 	public function test_role_views_expose_role_that_exists_only_via_teams() {
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Multisite only.' );
-		}
 
 		$blog2 = self::factory()->blog->create();
 		$tid   = WP_User_Teams::create_team( 'EditorsViaTeam', 'editors-via-team', '' );

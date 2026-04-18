@@ -19,9 +19,7 @@ class Test_Admin extends WP_UnitTestCase {
 		$this->admin = WP_User_Teams_Admin::instance();
 
 		$this->admin_user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		if ( is_multisite() ) {
-			grant_super_admin( $this->admin_user_id );
-		}
+		grant_super_admin( $this->admin_user_id );
 		wp_set_current_user( $this->admin_user_id );
 
 		$_POST    = array();
@@ -67,9 +65,6 @@ class Test_Admin extends WP_UnitTestCase {
 	}
 
 	public function test_handle_add_site_adds_grant() {
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Multisite only.' );
-		}
 
 		$team_id = WP_User_Teams::create_team( 'AddSite', 'addsite', '' );
 		$blog2   = self::factory()->blog->create();
@@ -87,9 +82,6 @@ class Test_Admin extends WP_UnitTestCase {
 	}
 
 	public function test_handle_add_site_with_empty_role_stores_inherit() {
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Multisite only.' );
-		}
 
 		$team_id = WP_User_Teams::create_team( 'AddInherit', 'add-inherit', 'editor' );
 		$blog2   = self::factory()->blog->create();
@@ -111,9 +103,6 @@ class Test_Admin extends WP_UnitTestCase {
 	 * ---------------------------------------------------------------- */
 
 	public function test_site_admin_without_network_rights_can_attach_team_to_own_site() {
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Multisite only.' );
-		}
 
 		$team_id = WP_User_Teams::create_team( 'AttachByAdmin', 'attach-admin', 'editor' );
 		$blog2   = self::factory()->blog->create();
@@ -141,9 +130,6 @@ class Test_Admin extends WP_UnitTestCase {
 	}
 
 	public function test_user_without_blog_role_cannot_attach_team() {
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Multisite only.' );
-		}
 
 		$team_id = WP_User_Teams::create_team( 'NoRights', 'no-rights', 'editor' );
 		$blog2   = self::factory()->blog->create();
@@ -169,9 +155,6 @@ class Test_Admin extends WP_UnitTestCase {
 	}
 
 	public function test_handle_remove_site_removes_grant() {
-		if ( ! is_multisite() ) {
-			$this->markTestSkipped( 'Multisite only.' );
-		}
 
 		$blog2   = self::factory()->blog->create();
 		$team_id = WP_User_Teams::create_team( 'RmSite', 'rmsite', '' );
