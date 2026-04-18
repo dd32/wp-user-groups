@@ -1,7 +1,6 @@
 {
 	"core": null,
 	"plugins": [ "." ],
-	"multisite": true,
 	"config": {
 		"WP_DEBUG": true,
 		"SCRIPT_DEBUG": true
