@@ -67,11 +67,8 @@ class WP_User_Teams {
 		add_filter( 'rest_user_query', array( $this, 'exclude_team_users_from_rest' ) );
 		add_filter( 'authenticate', array( $this, 'block_team_user_login' ), 100, 3 );
 
-		if ( is_multisite() ) {
-			add_filter( 'get_blogs_of_user', array( $this, 'filter_get_blogs_of_user' ), 10, 3 );
-			add_action( 'wp_delete_site', array( $this, 'on_site_deleted' ) );
-		}
-
+		add_filter( 'get_blogs_of_user', array( $this, 'filter_get_blogs_of_user' ), 10, 3 );
+		add_action( 'wp_delete_site', array( $this, 'on_site_deleted' ) );
 	}
 
 	/* ------------------------------------------------------------------
@@ -161,7 +158,7 @@ class WP_User_Teams {
 		$user_id = wp_insert_user( array(
 			'user_login'   => $login,
 			'user_pass'    => wp_generate_password( 64, true, true ),
-			'user_email'   => $login . '@teams.invalid',
+			'user_email'   => $login . '@teams.internal',
 			'display_name' => $name,
 			'first_name'   => $name,
 			'role'         => '', // No role on the registering (main) site by default.
@@ -228,13 +225,8 @@ class WP_User_Teams {
 		// team account itself. `deleted_user` fallback handles any races.
 		self::remove_team_from_all_users( $team_id );
 
-		if ( is_multisite() ) {
-			require_once ABSPATH . 'wp-admin/includes/ms.php';
-			wpmu_delete_user( $team_id );
-		} else {
-			require_once ABSPATH . 'wp-admin/includes/user.php';
-			wp_delete_user( $team_id );
-		}
+		require_once ABSPATH . 'wp-admin/includes/ms.php';
+		wpmu_delete_user( $team_id );
 
 		return true;
 	}
@@ -255,7 +247,7 @@ class WP_User_Teams {
 	/** @return array<int,string> blog_id => role slug ('' = member without a specific role) */
 	public static function get_team_site_roles( $team_id ) {
 		$team_id = (int) $team_id;
-		if ( ! is_multisite() || ! self::get_team( $team_id ) ) {
+		if ( ! self::get_team( $team_id ) ) {
 			return array();
 		}
 
@@ -279,9 +271,6 @@ class WP_User_Teams {
 		if ( ! self::get_team( $team_id ) ) {
 			return false;
 		}
-		if ( ! is_multisite() ) {
-			return true;
-		}
 
 		$desired = self::normalise_site_roles( $sites );
 		$current = self::get_team_site_roles( $team_id );
@@ -298,9 +287,6 @@ class WP_User_Teams {
 	}
 
 	public static function team_applies_to_site( $team_id, $blog_id = null ) {
-		if ( ! is_multisite() ) {
-			return true;
-		}
 		$team = self::get_team( $team_id );
 		if ( ! $team ) {
 			return false;
@@ -641,7 +627,7 @@ class WP_User_Teams {
 			'name'  => $u->display_name ?: $u->user_login,
 			'slug'  => $slug,
 			'role'  => (string) get_user_meta( $u->ID, self::GLOBAL_ROLE_META, true ),
-			'sites' => is_multisite() ? self::get_team_site_roles( $u->ID ) : array(),
+			'sites' => self::get_team_site_roles( $u->ID ),
 		);
 	}
 

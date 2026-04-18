@@ -2,9 +2,9 @@
 
 [![Tests](https://github.com/dd32/wp-user-teams/actions/workflows/test.yml/badge.svg?branch=trunk)](https://github.com/dd32/wp-user-teams/actions/workflows/test.yml)
 
-Unix-style user groups for WordPress, surfaced in the admin as "Teams". Define a team, attach a role, add users to it — members inherit the role everywhere the team applies.
+Unix-style user groups for WordPress multisite, surfaced in the admin as "Teams". Define a team, attach a role, add users to it — members inherit the role everywhere the team applies.
 
-Works on single-site WordPress and multisite networks. On multisite a single team can span selected sites or the entire network, so a "Meta Team" or "Playground Contributors" team doesn't need per-site setup.
+**Multisite-only by design.** A single team can span selected sites or the entire network, so a "Meta Team" or "Playground Contributors" team doesn't need per-site setup. On a single-site install, native roles and capabilities already cover the whole feature set, so the plugin is marked `Network: true` and WordPress won't offer it for activation.
 
 ## Why
 
@@ -21,7 +21,7 @@ WordPress roles and capabilities are per-site. On a large multisite network, gra
 - **Runtime capability grants.** Access is granted through the `user_has_cap` filter, so removing a user from a team drops their access on the next request — no stale `{prefix}capabilities` usermeta to clean up.
 - **Multisite-native.** Team definitions live in a single network-level site option; memberships live in `wp_usermeta`, which is global on multisite. No `switch_to_blog` juggling.
 - **Site scoping.** A team can apply to every site on the network (including sites added later) or a curated list of sites.
-- **Admin UI.** Users → Teams (single site) or Network Admin → Users → Teams (multisite). Per-user checkboxes on the Edit User screen. A "Teams" column on the Users list table.
+- **Admin UI.** Network Admin → Users → Teams. Per-user checkboxes on the Edit User screen. A "Teams" column on the Network Admin Users list.
 - **Cleans up after itself.** Deleting a team removes its memberships. Deleting a user drops their memberships. Deleting a site removes it from any team that targeted it.
 
 ## Data model
@@ -57,7 +57,7 @@ The user's actual `{prefix}capabilities` usermeta is never modified. This is wha
 
 ### Creating a team
 
-**Users → Teams → Add New** (on single site) or **Network Admin → Users → Teams → Add New** (on multisite):
+**Network Admin → Users → Teams → Add New**:
 
 - **Name** — display name, e.g. "WordPress Meta Team".
 - **Slug** — optional; auto-generated if blank.
@@ -101,12 +101,12 @@ if ( user_can( $user_id, 'edit_others_posts' ) ) {
 
 ## Capability requirements
 
-| Action | Single site | Multisite |
-|---|---|---|
-| Manage teams (create / edit / delete) | `promote_users` | `manage_network_users` (super admin) |
-| Assign teams to a user | same as above | same as above |
+| Action | Required cap |
+|---|---|
+| Manage teams (create / edit / delete) | `manage_network_users` (super admin) |
+| Attach a team to a specific site | `promote_users` on that site |
 
-On multisite, team management is restricted to super admins so that a compromised single-site administrator can't grant themselves access across the network.
+Team management is restricted to super admins so that a compromised single-site administrator can't grant themselves access across the network. Attaching an existing team to the current site, on the other hand, is as trusted an action as inviting an individual user there, and uses the same capability (`promote_users`).
 
 ## Development
 
@@ -130,8 +130,7 @@ That spins up a WordPress instance with this plugin active.
 ### Running tests
 
 ```bash
-npm run test            # single-site suite
-npm run test:multisite  # multisite suite (exercises site-scoping)
+npm run test
 ```
 
 All tests execute inside the wp-env `tests-cli` container against a real WordPress install, using [Yoast PHPUnit Polyfills](https://github.com/Yoast/PHPUnit-Polyfills) for cross-version assertion compatibility.
@@ -143,6 +142,7 @@ The test suite lives in [`tests/`](./tests) and covers:
 - `Test_Capabilities.php` — the `user_has_cap` filter grants and revokes caps correctly; multi-team merging; role changes propagate.
 - `Test_Multisite.php` — site-scoping, `get_blogs_of_user`, cleanup on site deletion.
 - `Test_Admin.php` — integration tests that drive the admin form handlers end-to-end via `$_POST`/`$_REQUEST`.
+- `Test_User_Query.php` — the `pre_user_query` / `views_users` / `get_role_list` hooks that surface teams and team members on `wp-admin/users.php`.
 
 ## Requirements
 

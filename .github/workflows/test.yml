@@ -36,11 +36,8 @@ jobs:
       - name: Install Composer dev dependencies (PHPUnit Polyfills)
         run: npm run composer -- install
 
-      - name: Run tests (single-site)
+      - name: Run tests
         run: npm run test
-
-      - name: Run tests (multisite)
-        run: npm run test:multisite
 
       - name: Stop WordPress environment
         if: always()
