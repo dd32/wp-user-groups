@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/dd32/wp-user-teams/actions/workflows/test.yml/badge.svg?branch=trunk)](https://github.com/dd32/wp-user-teams/actions/workflows/test.yml)
 
-Unix-style user teams for WordPress. Define a team, attach a role, add users to it — members inherit the role everywhere the team applies.
+Unix-style user groups for WordPress, surfaced in the admin as "Teams". Define a team, attach a role, add users to it — members inherit the role everywhere the team applies.
 
 Works on single-site WordPress and multisite networks. On multisite a single team can span selected sites or the entire network, so a "Meta Team" or "Playground Contributors" team doesn't need per-site setup.
 

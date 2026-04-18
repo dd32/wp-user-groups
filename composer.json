@@ -1,6 +1,6 @@
 {
 	"name": "dd32/wp-user-teams",
-	"description": "Unix-style user teams for WordPress.",
+	"description": "Unix-style user groups for WordPress — exposed as \"Teams\" in the admin.",
 	"type": "wordpress-plugin",
 	"license": "GPL-2.0-or-later",
 	"require": {
@@ -13,6 +13,9 @@
 	"config": {
 		"optimize-autoloader": true,
 		"sort-packages": true,
+		"platform": {
+			"php": "7.4.33"
+		},
 		"allow-plugins": {
 			"composer/installers": true
 		},

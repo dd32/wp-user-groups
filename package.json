@@ -11,6 +11,6 @@
 		"test:multisite": "wp-env run tests-cli --env-cwd=wp-content/plugins/wp-user-teams -- ./vendor/bin/phpunit -c phpunit-multisite.xml.dist"
 	},
 	"devDependencies": {
-		"@wordpress/env": "^10.0.0"
+		"@wordpress/env": "^11.0.0"
 	}
 }
