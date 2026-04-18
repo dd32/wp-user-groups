@@ -62,12 +62,87 @@ class WP_User_Teams_Admin {
 		add_filter( 'views_users-network', array( $this, 'filter_user_views' ) );
 		add_action( 'pre_get_users', array( $this, 'apply_team_filter_to_query' ) );
 
-		// Per-site Users screen: render a "Teams covering this site"
-		// table as styled first-rows in #the-list, and include team
-		// members in the main list even when they lack native caps
-		// meta for the current blog.
-		add_action( 'admin_notices', array( $this, 'render_site_team_coverage_table' ) );
+		// Per-site Users screen: include team members in the list even
+		// when they lack native caps meta for the current blog.
 		add_action( 'pre_user_query', array( $this, 'include_team_members_in_user_query' ) );
+
+		// On Users list screens, opt team accounts back into the user
+		// query (they're globally excluded by WP_User_Teams). Team
+		// accounts have native capabilities meta for the sites they
+		// cover, so WP_Users_List_Table renders them as real rows.
+		add_action( 'pre_get_users', array( $this, 'include_team_users_on_users_screens' ), 5 );
+
+		// Replace the default row actions on team-account rows with
+		// team-specific ones (Edit team / Remove from site).
+		add_filter( 'user_row_actions', array( $this, 'filter_user_row_actions' ), 10, 2 );
+
+		// Style team account rows distinctly (background, "Team" badge
+		// before the login) on both the per-site and network users lists.
+		add_action( 'admin_head-users.php', array( $this, 'print_team_row_styles' ) );
+		add_action( 'admin_head-users-network.php', array( $this, 'print_team_row_styles' ) );
+	}
+
+	public function include_team_users_on_users_screens( $query ) {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen ) {
+			return;
+		}
+		if ( 'users' !== $screen->base && 'users-network' !== $screen->base ) {
+			return;
+		}
+		$query->set( WP_User_Teams::QUERY_INCLUDE_FLAG, true );
+	}
+
+	public function filter_user_row_actions( $actions, $user ) {
+		if ( ! $user instanceof WP_User || ! WP_User_Teams::is_team_user( $user->ID ) ) {
+			return $actions;
+		}
+		$new = array();
+		if ( current_user_can( self::required_cap() ) ) {
+			$edit_url = $this->page_url( array( 'action' => 'edit', 'team_id' => (int) $user->ID ) );
+			$new['wput-edit-team'] = '<a href="' . esc_url( $edit_url ) . '">' . esc_html__( 'Edit team', 'wp-user-teams' ) . '</a>';
+		}
+		if ( current_user_can( 'promote_users' ) ) {
+			$remove_url = wp_nonce_url(
+				add_query_arg(
+					array(
+						'action'  => 'wp_user_teams_remove_site',
+						'team_id' => (int) $user->ID,
+						'blog_id' => (int) get_current_blog_id(),
+					),
+					admin_url( 'admin-post.php' )
+				),
+				self::NONCE_ACTION
+			);
+			$new['wput-remove-from-site'] = '<a href="' . esc_url( $remove_url ) . '" class="submitdelete" onclick="return confirm(\'' . esc_js( __( 'Remove this team from the site? Members lose the team-granted role here.', 'wp-user-teams' ) ) . '\');">' . esc_html__( 'Remove from site', 'wp-user-teams' ) . '</a>';
+		}
+		return $new;
+	}
+
+	public function print_team_row_styles() {
+		global $wpdb;
+		$team_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s AND meta_value = %s",
+				WP_User_Teams::IS_TEAM_META_KEY,
+				'1'
+			)
+		);
+		if ( empty( $team_ids ) ) {
+			return;
+		}
+		$selectors = array_map( fn( $id ) => '#user-' . (int) $id, $team_ids );
+		$sel       = implode( ',', $selectors );
+		echo "<style>\n";
+		echo "{$sel} { background:#f6f7f7; }\n";
+		echo "{$sel} td { border-top:3px solid #e5e5e5; }\n";
+		echo "{$sel} .column-username strong::before {\n";
+		echo "  content:'Team'; display:inline-block; font-size:10px; text-transform:uppercase;\n";
+		echo "  letter-spacing:0.04em; font-weight:600; color:#2271b1;\n";
+		echo "  background:#e7f1fb; border-radius:3px; padding:2px 6px; margin-right:6px;\n";
+		echo "  vertical-align:middle;\n";
+		echo "}\n";
+		echo "</style>\n";
 	}
 
 	/* ------------------------------------------------------------------

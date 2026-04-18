@@ -541,6 +541,12 @@ class WP_User_Teams {
 	 * ---------------------------------------------------------------- */
 
 	public function filter_get_blogs_of_user( $blogs, $user_id, $all ) {
+		// Skip for team accounts — they don't belong to other teams, and
+		// `get_team_site_roles()` calls `get_blogs_of_user()` on the team
+		// account itself, which would recurse back into this filter.
+		if ( self::is_team_user( $user_id ) ) {
+			return $blogs;
+		}
 		$user_teams = self::get_user_teams( $user_id );
 		if ( empty( $user_teams ) ) {
 			return $blogs;
