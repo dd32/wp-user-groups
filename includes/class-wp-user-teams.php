@@ -61,20 +61,11 @@ class WP_User_Teams {
 		add_action( 'deleted_user', array( $this, 'on_user_deleted' ) );
 
 		// Team accounts are real users but should be invisible to most
-		// user-facing systems.
-		//
-		// TODO(PR review): these three filters are temporarily commented
-		// out — enabling them hangs the multisite test-framework boot.
-		// Suspected culprit: `exclude_team_users_by_default` running
-		// inside WP's install.php, where `$wpdb->usermeta` is queried
-		// before it's fully populated. Worth gating on
-		// `did_action( 'init' )` or similar, and verifying recursion in
-		// `filter_get_blogs_of_user → get_team_site_roles → get_blogs_of_user`
-		// isn't biting.
-		//
-		// add_action( 'pre_user_query', array( $this, 'exclude_team_users_by_default' ) );
-		// add_filter( 'rest_user_query', array( $this, 'exclude_team_users_from_rest' ) );
-		// add_filter( 'authenticate', array( $this, 'block_team_user_login' ), 100, 3 );
+		// user-facing systems. The filters short-circuit during
+		// `WP_INSTALLING` so WP's own install flow isn't disrupted.
+		add_action( 'pre_user_query', array( $this, 'exclude_team_users_by_default' ) );
+		add_filter( 'rest_user_query', array( $this, 'exclude_team_users_from_rest' ) );
+		add_filter( 'authenticate', array( $this, 'block_team_user_login' ), 100, 3 );
 
 		if ( is_multisite() ) {
 			add_filter( 'get_blogs_of_user', array( $this, 'filter_get_blogs_of_user' ), 10, 3 );
@@ -520,11 +511,17 @@ class WP_User_Teams {
 	 * ---------------------------------------------------------------- */
 
 	public function exclude_team_users_by_default( $query ) {
+		// Skip while WordPress is setting itself up — the test framework's
+		// install.php and the first-run installer both run user queries
+		// before `wp_usermeta` is populated, and our NOT IN subquery makes
+		// multisite's site-lookup fail mid-install.
+		if ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) {
+			return;
+		}
 		if ( $query->get( self::QUERY_INCLUDE_FLAG ) ) {
 			return;
 		}
 		global $wpdb;
-		// Exclude any user with `wput_is_team = '1'` via NOT IN subquery.
 		$not_in = "(SELECT DISTINCT user_id FROM {$wpdb->usermeta} WHERE meta_key = '" . esc_sql( self::IS_TEAM_META_KEY ) . "' AND meta_value = '1')";
 		$query->query_where .= " AND {$wpdb->users}.ID NOT IN {$not_in}";
 	}
