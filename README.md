@@ -19,21 +19,23 @@ WordPress roles and capabilities are per-site. On a large multisite network, gra
 
 - **Teams with roles.** Each team is associated with a WordPress role (editor, administrator, a custom role, or nothing).
 - **Runtime capability grants.** Access is granted through the `user_has_cap` filter, so removing a user from a team drops their access on the next request — no stale `{prefix}capabilities` usermeta to clean up.
-- **Multisite-native.** Team definitions live in a single network-level site option; memberships live in `wp_usermeta`, which is global on multisite. No `switch_to_blog` juggling.
+- **Multisite-native.** Teams are real `wp_users` rows ("team accounts"), so `WP_Users_List_Table`, `is_user_member_of_blog()`, and column-adding plugins "just work". Memberships live in `wp_usermeta`, which is global on multisite.
 - **Site scoping.** A team can apply to every site on the network (including sites added later) or a curated list of sites.
 - **Admin UI.** Network Admin → Users → Teams. Per-user checkboxes on the Edit User screen. A "Teams" column on the Network Admin Users list.
 - **Cleans up after itself.** Deleting a team removes its memberships. Deleting a user drops their memberships. Deleting a site removes it from any team that targeted it.
 
 ## Data model
 
-Two WordPress primitives, both cached by the object cache:
+Teams are stored natively, no custom tables:
 
 | Storage | Purpose |
 |---|---|
-| `wp_user_teams` site option | Map of team ID → `{ id, name, slug, role, sites }`. `get_site_option()` is per-network on multisite, per-install on single site. |
-| `wp_user_teams` user meta | Array of team IDs the user belongs to. `wp_usermeta` is global on multisite, so a user's memberships follow them across sites. |
+| `wp_users` row (team account) | One row per team. `display_name` = team name, `user_login` = `_team_{slug}`, marked by `wput_is_team = '1'` meta. Login and password reset are blocked. |
+| `wput_slug`, `wput_global_role` user meta | Per-team slug and the role granted network-wide (if any). |
+| `wp_{blog_id}_capabilities` on the team row | Per-site role grants. Storing them natively on the team account means `is_user_member_of_blog()` and `WP_Users_List_Table` recognise team coverage without extra plumbing. |
+| `wp_user_teams` meta on the member user | Array of team IDs the user belongs to. `wp_usermeta` is global on multisite, so a user's memberships follow them across sites. |
 
-"Which teams is user X in?" is a single `get_user_meta()` call — served from the metadata cache after the first hit. "Which users are in team Y?" uses the indexed `meta_key` lookup on `wp_usermeta`.
+"Which teams is user X in?" is a single `get_user_meta()` call. "Which users are in team Y?" uses the indexed `meta_key` lookup on `wp_usermeta`.
 
 ## How access is granted
 
@@ -71,23 +73,33 @@ Edit a user's profile. The **User Teams** section lists every defined team with 
 ### Programmatic API
 
 ```php
-// Create a team.
-$id = WP_User_Teams::create_team( 'Meta Team', 'meta-team', 'editor' );
+use dd32\WordPress\UserTeams\Plugin;
 
-// Scope it to specific sites on multisite (empty array = all sites).
-WP_User_Teams::set_team_sites( $id, array( 1, 4, 9 ) );
+// Create a team.
+$id = Plugin::create_team( 'Meta Team', 'meta-team', 'editor' );
+
+// Scope it to specific sites, optionally with per-site role overrides.
+Plugin::set_team_sites( $id, array( 1 => 'editor', 4 => 'author' ) );
 
 // Add / remove members.
-WP_User_Teams::add_user_to_team( $user_id, $id );
-WP_User_Teams::remove_user_from_team( $user_id, $id );
-WP_User_Teams::set_user_teams( $user_id, array( $id, $other_id ) );
+Plugin::add_user_to_team( $user_id, $id );
+Plugin::remove_user_from_team( $user_id, $id );
+Plugin::set_user_teams( $user_id, array( $id, $other_id ) );
 
 // Inspect.
-WP_User_Teams::get_user_teams( $user_id );        // full team records, keyed by ID
-WP_User_Teams::get_user_team_ids( $user_id );     // just the IDs
-WP_User_Teams::get_team_members( $id );           // user IDs in this team
-WP_User_Teams::count_members_per_team();          // [ team_id => count ]
+Plugin::get_user_teams( $user_id );        // full team records, keyed by ID
+Plugin::get_user_team_ids( $user_id );     // just the IDs
+Plugin::get_team_members( $id );           // user IDs in this team
+Plugin::count_members_per_team();          // [ team_id => count ]
 ```
+
+### Extension filters
+
+| Filter | Use |
+|---|---|
+| `wput_team_caps_for_user( $caps, $user_id, $blog_id )` | Modify the capability map computed from a user's teams. |
+| `wput_team_applies_to_site( $applies, $team_id, $blog_id, $team )` | Gate coverage (e.g. pause a team during a freeze). |
+| `wput_team_save_data( $data, $team_id_or_null, $op )` | Filter sanitised input on create/update. |
 
 ### Checking access
 
