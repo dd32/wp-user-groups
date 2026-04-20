@@ -4,7 +4,7 @@ Tags: users, roles, multisite, team, permissions
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -73,7 +73,8 @@ Each team is a real `wp_users` row (a "team account") marked with `wput_is_team`
 use dd32\WordPress\UserTeams\Plugin;
 
 $id = Plugin::create_team( 'Meta Team', 'meta-team', 'editor' );
-Plugin::set_team_sites( $id, array( 1 => 'editor', 4 => 'author' ) );
+Plugin::add_team_to_site( $id, 1, 'editor' );
+Plugin::add_team_to_site( $id, 4, 'author' );
 Plugin::add_user_to_team( $user_id, $id );
 `
 
@@ -94,6 +95,11 @@ On GitHub at [dd32/wp-user-teams](https://github.com/dd32/wp-user-teams). That's
 File it on [GitHub](https://github.com/dd32/wp-user-teams/issues). General support questions belong in the [WordPress.org Support Forums](https://wordpress.org/support/plugin/user-teams/).
 
 == Changelog ==
+
+= 0.2.1 =
+* Rework the public site-grant API: `add_team_to_site()` / `remove_team_from_site()` replace the bulk `set_team_sites()`.
+* Rename `scripts/` dev helpers to `env/`.
+* Drop the old <template>-injection user-list renderer and other dead code.
 
 = 0.1.0 =
 * Initial release.

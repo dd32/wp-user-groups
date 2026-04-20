@@ -35,7 +35,7 @@ class Test_User_Query extends WP_UnitTestCase {
 
 		$blog2 = self::factory()->blog->create();
 		$tid   = Plugin::create_team( 'Q', 'q', '' );
-		Plugin::set_team_sites( $tid, array( $blog2 => 'editor' ) );
+		Plugin::add_team_to_site( $tid, $blog2, 'editor' );
 
 		// User has NO capabilities on $blog2; only membership is via the team.
 		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
@@ -50,7 +50,7 @@ class Test_User_Query extends WP_UnitTestCase {
 
 		$blog2 = self::factory()->blog->create();
 		$tid   = Plugin::create_team( 'Dedupe', 'dedupe', '' );
-		Plugin::set_team_sites( $tid, array( $blog2 => 'editor' ) );
+		Plugin::add_team_to_site( $tid, $blog2, 'editor' );
 
 		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		// Sprinkle extra usermeta so the LEFT JOIN would expand without DISTINCT.
@@ -74,7 +74,7 @@ class Test_User_Query extends WP_UnitTestCase {
 		// Create a team that doesn't apply to blog2.
 		$other_blog = self::factory()->blog->create();
 		$tid        = Plugin::create_team( 'Other', 'other', '' );
-		Plugin::set_team_sites( $tid, array( $other_blog => 'editor' ) );
+		Plugin::add_team_to_site( $tid, $other_blog, 'editor' );
 		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		Plugin::add_user_to_team( $uid, $tid );
 
@@ -161,7 +161,7 @@ class Test_User_Query extends WP_UnitTestCase {
 		$blog3 = self::factory()->blog->create();
 
 		$covers_only_blog3 = Plugin::create_team( 'Blog3Only', 'blog3-only', '' );
-		Plugin::set_team_sites( $covers_only_blog3, array( $blog3 => 'editor' ) );
+		Plugin::add_team_to_site( $covers_only_blog3, $blog3, 'editor' );
 		Plugin::add_user_to_team( self::factory()->user->create(), $covers_only_blog3 );
 
 		switch_to_blog( $blog2 );
@@ -196,7 +196,7 @@ class Test_User_Query extends WP_UnitTestCase {
 
 		$blog2 = self::factory()->blog->create();
 		$tid   = Plugin::create_team( 'Searchable', 'searchable', '' );
-		Plugin::set_team_sites( $tid, array( $blog2 => 'editor' ) );
+		Plugin::add_team_to_site( $tid, $blog2, 'editor' );
 
 		$alice = self::factory()->user->create( array( 'user_login' => 'alice_wut', 'display_name' => 'Alice W' ) );
 		$bob   = self::factory()->user->create( array( 'user_login' => 'bobby', 'display_name' => 'Bob B' ) );
@@ -218,7 +218,7 @@ class Test_User_Query extends WP_UnitTestCase {
 
 		$blog2 = self::factory()->blog->create();
 		$tid   = Plugin::create_team( 'None', 'nomatch', '' );
-		Plugin::set_team_sites( $tid, array( $blog2 => 'editor' ) );
+		Plugin::add_team_to_site( $tid, $blog2, 'editor' );
 		$uid = self::factory()->user->create( array( 'user_login' => 'bob_smith' ) );
 		Plugin::add_user_to_team( $uid, $tid );
 
@@ -240,7 +240,7 @@ class Test_User_Query extends WP_UnitTestCase {
 
 		$blog2 = self::factory()->blog->create();
 		$tid   = Plugin::create_team( 'RoleMatch', 'role-match', '' );
-		Plugin::set_team_sites( $tid, array( $blog2 => 'editor' ) );
+		Plugin::add_team_to_site( $tid, $blog2, 'editor' );
 		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		Plugin::add_user_to_team( $uid, $tid );
 
@@ -258,7 +258,7 @@ class Test_User_Query extends WP_UnitTestCase {
 
 		$blog2 = self::factory()->blog->create();
 		$tid   = Plugin::create_team( 'WrongRole', 'wrong-role', '' );
-		Plugin::set_team_sites( $tid, array( $blog2 => 'author' ) );
+		Plugin::add_team_to_site( $tid, $blog2, 'author' );
 		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		Plugin::add_user_to_team( $uid, $tid );
 
@@ -276,7 +276,7 @@ class Test_User_Query extends WP_UnitTestCase {
 
 		$blog2 = self::factory()->blog->create();
 		$tid   = Plugin::create_team( 'EditorsViaTeam', 'editors-via-team', '' );
-		Plugin::set_team_sites( $tid, array( $blog2 => 'editor' ) );
+		Plugin::add_team_to_site( $tid, $blog2, 'editor' );
 		Plugin::add_user_to_team( self::factory()->user->create(), $tid );
 		Plugin::add_user_to_team( self::factory()->user->create(), $tid );
 

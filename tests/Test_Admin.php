@@ -160,7 +160,7 @@ class Test_Admin extends WP_UnitTestCase {
 
 		$blog2   = self::factory()->blog->create();
 		$team_id = Plugin::create_team( 'RmSite', 'rmsite', '' );
-		Plugin::set_team_sites( $team_id, array( $blog2 => 'editor' ) );
+		Plugin::add_team_to_site( $team_id, $blog2, 'editor' );
 
 		$this->get_query( array(
 			'team_id'  => (string) $team_id,

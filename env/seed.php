@@ -5,7 +5,7 @@ use dd32\WordPress\UserTeams\Admin;
  * Development seed data for the local wp-env test site.
  *
  * Run via wp-cli:
- *   wp eval-file wp-content/plugins/wp-user-teams/scripts/seed.php --url=claude.home.dd32.au
+ *   wp eval-file wp-content/plugins/wp-user-teams/env/seed.php --url=claude.home.dd32.au
  *
  * Idempotent: re-running will upsert by slug / username.
  */
@@ -127,13 +127,11 @@ foreach ( $team_defs as $slug => $def ) {
 	$team_ids[ $slug ] = (int) $tid;
 
 	if ( is_multisite() ) {
-		$blog_ids = array();
 		foreach ( $def['site_slugs'] as $site_slug ) {
 			if ( isset( $sites[ $site_slug ] ) ) {
-				$blog_ids[] = $sites[ $site_slug ];
+				Plugin::add_team_to_site( $tid, $sites[ $site_slug ] );
 			}
 		}
-		Plugin::set_team_sites( $tid, $blog_ids );
 	}
 }
 

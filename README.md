@@ -73,7 +73,8 @@ use dd32\WordPress\UserTeams\Plugin;
 $id = Plugin::create_team( 'Meta Team', 'meta-team', 'editor' );
 
 // Scope it to specific sites, optionally with per-site role overrides.
-Plugin::set_team_sites( $id, array( 1 => 'editor', 4 => 'author' ) );
+Plugin::add_team_to_site( $id, 1, 'editor' );
+Plugin::add_team_to_site( $id, 4, 'author' );
 
 // Add / remove members.
 Plugin::add_user_to_team( $user_id, $id );

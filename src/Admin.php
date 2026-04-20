@@ -915,18 +915,10 @@ class Admin {
 		$blog_id = (int) ( $_POST['blog_id'] ?? 0 );
 		$role    = sanitize_key( wp_unslash( $_POST['role'] ?? '' ) );
 
-		$team = Plugin::get_team( $team_id );
-		if ( ! $team || $blog_id <= 0 ) {
+		if ( ! Plugin::add_team_to_site( $team_id, $blog_id, $role ) ) {
 			$this->redirect_with_notice( 'save-failed', __( 'Invalid site or team.', 'user-teams' ) );
 			return;
 		}
-		if ( $role && ! wp_roles()->is_role( $role ) ) {
-			$role = '';
-		}
-
-		$site_roles             = $team['sites'];
-		$site_roles[ $blog_id ] = $role;
-		Plugin::set_team_sites( $team_id, $site_roles );
 
 		wp_safe_redirect( $this->page_url( array( 'action' => 'edit', 'team_id' => $team_id, 'notice' => 'saved' ) ) );
 		exit;
@@ -949,14 +941,7 @@ class Admin {
 		$blog_id  = (int) ( $_GET['blog_id'] ?? 0 );
 		$from_net = is_network_admin();
 
-		$team   = Plugin::get_team( $team_id );
-		$notice = 'save-failed';
-		if ( $team && $blog_id > 0 ) {
-			$site_roles = $team['sites'];
-			unset( $site_roles[ $blog_id ] );
-			Plugin::set_team_sites( $team_id, $site_roles );
-			$notice = 'saved';
-		}
+		$notice = Plugin::remove_team_from_site( $team_id, $blog_id ) ? 'saved' : 'save-failed';
 
 		if ( $from_net ) {
 			wp_safe_redirect( $this->page_url( array( 'action' => 'edit', 'team_id' => $team_id, 'notice' => $notice ) ) );
@@ -984,18 +969,10 @@ class Admin {
 		}
 
 		$team = Plugin::get_team( $team_id );
-		if ( ! $team || ! $blog_id ) {
+		if ( ! $team || ! Plugin::add_team_to_site( $team_id, $blog_id, $role ) ) {
 			$this->redirect_to_user_new( 'attach-failed' );
 			return;
 		}
-
-		if ( $role && ! wp_roles()->is_role( $role ) ) {
-			$role = '';
-		}
-
-		$site_roles             = $team['sites'];
-		$site_roles[ $blog_id ] = $role; // Empty role = inherit Global Role here.
-		Plugin::set_team_sites( $team_id, $site_roles );
 
 		$this->redirect_to_user_new( 'attach-saved', $team['name'] );
 	}

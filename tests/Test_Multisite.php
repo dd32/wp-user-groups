@@ -16,8 +16,8 @@ class Test_Multisite extends WP_UnitTestCase {
 	/* ----- Site scoping ----- */
 
 	public function test_team_with_no_sites_applies_everywhere() {
+		// No per-site grants + a Global Role = the team covers every site.
 		$tid = Plugin::create_team( 'Global', 'global', 'editor' );
-		Plugin::set_team_sites( $tid, array() ); // empty = all sites
 
 		$blog2 = self::factory()->blog->create();
 
@@ -31,7 +31,7 @@ class Test_Multisite extends WP_UnitTestCase {
 
 		// No Global Role → team applies only where per-site role grants exist.
 		$tid = Plugin::create_team( 'Selective', 'selective', '' );
-		Plugin::set_team_sites( $tid, array( $blog2 => 'editor' ) );
+		Plugin::add_team_to_site( $tid, $blog2, 'editor' );
 
 		$this->assertFalse( Plugin::team_applies_to_site( $tid, get_main_site_id() ) );
 		$this->assertTrue( Plugin::team_applies_to_site( $tid, $blog2 ) );
@@ -44,7 +44,7 @@ class Test_Multisite extends WP_UnitTestCase {
 
 		// Global Role = editor → applies to every site including unlisted ones.
 		$tid = Plugin::create_team( 'Wide', 'wide', 'editor' );
-		Plugin::set_team_sites( $tid, array( $blog2 => 'author' ) );
+		Plugin::add_team_to_site( $tid, $blog2, 'author' );
 
 		$this->assertTrue( Plugin::team_applies_to_site( $tid, get_main_site_id() ) );
 		$this->assertTrue( Plugin::team_applies_to_site( $tid, $blog2 ) );
@@ -55,7 +55,7 @@ class Test_Multisite extends WP_UnitTestCase {
 		$blog2 = self::factory()->blog->create();
 
 		$tid = Plugin::create_team( 'Override', 'override', 'editor' );
-		Plugin::set_team_sites( $tid, array( $blog2 => 'author' ) );
+		Plugin::add_team_to_site( $tid, $blog2, 'author' );
 
 		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		Plugin::add_user_to_team( $uid, $tid );
@@ -74,7 +74,7 @@ class Test_Multisite extends WP_UnitTestCase {
 		$blog2 = self::factory()->blog->create();
 
 		$tid = Plugin::create_team( 'Inherit', 'inherit', 'editor' );
-		Plugin::set_team_sites( $tid, array( $blog2 => '' ) ); // explicit grant, empty override
+		Plugin::add_team_to_site( $tid, $blog2, '' ); // explicit grant, empty override
 
 		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		Plugin::add_user_to_team( $uid, $tid );
@@ -83,27 +83,30 @@ class Test_Multisite extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'edit_others_posts', $caps_blog2 );
 	}
 
-	public function test_set_team_sites_replaces_previous() {
+	public function test_remove_team_from_site_drops_grant() {
 		$blog2 = self::factory()->blog->create();
 		$blog3 = self::factory()->blog->create();
 
 		$tid = Plugin::create_team( 'Swap', 'swap', 'editor' );
-		Plugin::set_team_sites( $tid, array( $blog2 ) );
-		Plugin::set_team_sites( $tid, array( $blog3 ) );
+		Plugin::add_team_to_site( $tid, $blog2 );
+		Plugin::add_team_to_site( $tid, $blog3 );
+		Plugin::remove_team_from_site( $tid, $blog2 );
 
 		$sites = Plugin::get_team_sites( $tid );
 		$this->assertContains( $blog3, $sites );
 		$this->assertNotContains( $blog2, $sites );
 	}
 
-	public function test_set_team_sites_filters_empty_values() {
+	public function test_add_team_to_site_rejects_invalid_blog_id() {
 		$blog2 = self::factory()->blog->create();
+		$tid   = Plugin::create_team( 'Clean', 'clean', 'editor' );
 
-		$tid = Plugin::create_team( 'Clean', 'clean', 'editor' );
-		Plugin::set_team_sites( $tid, array( 0, '', $blog2, null, '0' ) );
-
-		$sites = Plugin::get_team_sites( $tid );
-		$this->assertSame( array( $blog2 ), $sites );
+		$this->assertFalse( Plugin::add_team_to_site( $tid, 0 ) );
+		$this->assertFalse( Plugin::add_team_to_site( $tid, '' ) );
+		$this->assertFalse( Plugin::add_team_to_site( $tid, null ) );
+		$this->assertFalse( Plugin::add_team_to_site( $tid, '0' ) );
+		$this->assertTrue(  Plugin::add_team_to_site( $tid, $blog2 ) );
+		$this->assertSame( array( $blog2 ), Plugin::get_team_sites( $tid ) );
 	}
 
 	/* ----- Capabilities scoped by site ----- */
@@ -114,7 +117,7 @@ class Test_Multisite extends WP_UnitTestCase {
 
 		// No Global Role → only sites listed in per-site grants get caps.
 		$tid = Plugin::create_team( 'Team', 'team', '' );
-		Plugin::set_team_sites( $tid, array( $blog2 => 'editor' ) );
+		Plugin::add_team_to_site( $tid, $blog2, 'editor' );
 
 		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		Plugin::add_user_to_team( $uid, $tid );
@@ -134,7 +137,7 @@ class Test_Multisite extends WP_UnitTestCase {
 		$blog2 = self::factory()->blog->create();
 
 		$tid = Plugin::create_team( 'Team', 'team-blog', '' );
-		Plugin::set_team_sites( $tid, array( $blog2 => 'editor' ) );
+		Plugin::add_team_to_site( $tid, $blog2, 'editor' );
 
 		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		Plugin::add_user_to_team( $uid, $tid );
@@ -148,7 +151,7 @@ class Test_Multisite extends WP_UnitTestCase {
 
 		// No Global Role → non-granted sites are not members.
 		$tid = Plugin::create_team( 'Team', 'team-scope', '' );
-		Plugin::set_team_sites( $tid, array( $blog2 => 'editor' ) );
+		Plugin::add_team_to_site( $tid, $blog2, 'editor' );
 
 		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		Plugin::add_user_to_team( $uid, $tid );
@@ -160,7 +163,7 @@ class Test_Multisite extends WP_UnitTestCase {
 		$blog2 = self::factory()->blog->create();
 
 		$tid = Plugin::create_team( 'Team', 'team-caps', 'editor' );
-		Plugin::set_team_sites( $tid, array( $blog2 ) );
+		Plugin::add_team_to_site( $tid, $blog2 );
 
 		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		Plugin::add_user_to_team( $uid, $tid );
@@ -185,7 +188,7 @@ class Test_Multisite extends WP_UnitTestCase {
 		$blog2 = self::factory()->blog->create();
 
 		$tid = Plugin::create_team( 'NoRole', 'norole', '' );
-		Plugin::set_team_sites( $tid, array( $blog2 ) );
+		Plugin::add_team_to_site( $tid, $blog2 );
 
 		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		Plugin::add_user_to_team( $uid, $tid );
@@ -199,7 +202,7 @@ class Test_Multisite extends WP_UnitTestCase {
 		$blog2 = self::factory()->blog->create();
 
 		$tid = Plugin::create_team( 'Team', 'team-blogs', 'editor' );
-		Plugin::set_team_sites( $tid, array( $blog2 ) );
+		Plugin::add_team_to_site( $tid, $blog2 );
 
 		$uid = self::factory()->user->create();
 		Plugin::add_user_to_team( $uid, $tid );
@@ -215,7 +218,8 @@ class Test_Multisite extends WP_UnitTestCase {
 		$blog3 = self::factory()->blog->create();
 
 		$tid = Plugin::create_team( 'Multi', 'multi', 'editor' );
-		Plugin::set_team_sites( $tid, array( $blog2, $blog3 ) );
+		Plugin::add_team_to_site( $tid, $blog2 );
+		Plugin::add_team_to_site( $tid, $blog3 );
 
 		wp_delete_site( $blog2 );
 		Plugin::flush_all_caches();
