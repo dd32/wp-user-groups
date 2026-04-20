@@ -134,18 +134,19 @@ class WP_User_Teams_Admin {
 		if ( empty( $team_names ) ) {
 			return;
 		}
-		$ids_int   = array_keys( $team_names );
-		$selectors = array_map( fn( $id ) => '#user-' . $id, $ids_int );
-		$sel       = implode( ",\n", $selectors );
-		echo <<<CSS
+		// Target a class rather than `#user-{id}` because the network
+		// users list (`WP_MS_Users_List_Table::display_rows`) renders
+		// `<tr>` without an id. The JS below tags both per-site and
+		// network team rows with `wput-team-row`.
+		echo <<<'CSS'
 		<style>
-		{$sel} {
+		tr.wput-team-row {
 			background: #f6f7f7;
 		}
-		{$sel} td {
+		tr.wput-team-row td {
 			border-top: 3px solid #e5e5e5;
 		}
-		{$sel} .column-username strong::before {
+		tr.wput-team-row .column-username strong::before {
 			content: 'Team';
 			display: inline-block;
 			font-size: 10px;
@@ -160,16 +161,16 @@ class WP_User_Teams_Admin {
 			vertical-align: middle;
 		}
 		/* Hide the auto-generated `_team_*` login line in the username cell. */
-		{$sel} .column-username .row-actions + br + span,
-		{$sel} .column-username > br,
-		{$sel} .column-username > span:not(.wput-role) {
+		tr.wput-team-row .column-username .row-actions + br + span,
+		tr.wput-team-row .column-username > br,
+		tr.wput-team-row .column-username > span:not(.wput-role) {
 			display: none;
 		}
 		/* Drop the placeholder `*@teams.internal` mailto — show a dash instead. */
-		{$sel} .column-email a {
+		tr.wput-team-row .column-email a {
 			display: none;
 		}
-		{$sel} .column-email::before {
+		tr.wput-team-row .column-email::before {
 			content: '—';
 			color: #646970;
 		}
@@ -184,10 +185,22 @@ class WP_User_Teams_Admin {
 		( function () {
 			var teamNames  = <?php echo $team_names_json; ?>;
 			var memberTeams = <?php echo $member_teams; ?>;
+
+			// Per-site Users list gives each row `id="user-{id}"`. The
+			// network list's `<tr>` has no id — find it by the bulk
+			// checkbox `#blog_{id}`. Returns `null` if neither is on page.
+			function findUserRow( id ) {
+				var row = document.getElementById( 'user-' + id );
+				if ( row ) { return row; }
+				var cb = document.getElementById( 'blog_' + id );
+				return cb ? cb.closest( 'tr' ) : null;
+			}
+
 			document.addEventListener( 'DOMContentLoaded', function () {
 				Object.keys( teamNames ).forEach( function ( id ) {
-					var row = document.getElementById( 'user-' + id );
+					var row = findUserRow( id );
 					if ( ! row ) { return; }
+					row.classList.add( 'wput-team-row' );
 					var displayName = teamNames[ id ];
 
 					// Walk text nodes in the username cell. The `_team_*`
@@ -216,9 +229,9 @@ class WP_User_Teams_Admin {
 				// Append " — Team A, Team B" to member usernames, matching
 				// WP's own "— Super Admin" marker. Skip team-user rows.
 				Object.keys( memberTeams ).forEach( function ( uid ) {
-					var row = document.getElementById( 'user-' + uid );
-					if ( ! row ) { return; }
 					if ( teamNames[ uid ] ) { return; }
+					var row = findUserRow( uid );
+					if ( ! row ) { return; }
 					var strong = row.querySelector( '.column-username strong' );
 					if ( ! strong ) { return; }
 					strong.appendChild( document.createTextNode( ' \u2014 ' + memberTeams[ uid ].join( ', ' ) ) );
