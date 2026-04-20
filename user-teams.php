@@ -17,9 +17,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'WP_USER_TEAMS_VERSION', '0.1.0' );
-define( 'WP_USER_TEAMS_FILE', __FILE__ );
-define( 'WP_USER_TEAMS_PATH', plugin_dir_path( __FILE__ ) );
+define( 'USER_TEAMS_VERSION', '0.1.0' );
+define( 'USER_TEAMS_FILE', __FILE__ );
+define( 'USER_TEAMS_PATH', plugin_dir_path( __FILE__ ) );
 
 // The `Network: true` plugin header means this plugin is only
 // available to activate on multisite — WordPress hides the Activate
@@ -35,7 +35,7 @@ spl_autoload_register( function ( $class ) {
 		return;
 	}
 	$relative = substr( $class, strlen( $prefix ) );
-	$path     = WP_USER_TEAMS_PATH . 'src/' . str_replace( '\\', '/', $relative ) . '.php';
+	$path     = USER_TEAMS_PATH . 'src/' . str_replace( '\\', '/', $relative ) . '.php';
 	if ( file_exists( $path ) ) {
 		require $path;
 	}
