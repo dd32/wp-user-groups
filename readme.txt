@@ -53,11 +53,6 @@ Team management is restricted to super admins so a compromised single-site admin
 * `wput_team_applies_to_site( $applies, $team_id, $blog_id, $team )` — gate coverage (e.g. pause a team during a freeze).
 * `wput_team_save_data( $data, $team_id_or_null, $op )` — filter sanitised input on create/update.
 
-== Installation ==
-
-1. Drop the `wp-user-teams` directory into `wp-content/plugins/`.
-2. Network-activate it. The plugin is marked `Network: true` and won't offer activation on single-site installs.
-
 == Frequently Asked Questions ==
 
 = Does this work on a single-site install? =

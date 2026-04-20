@@ -49,12 +49,6 @@ Team-derived capabilities are merged in at runtime through three filters:
 
 The user's actual `{prefix}capabilities` usermeta is never modified. This is what makes team-based access instantly revocable.
 
-## Installation
-
-1. Drop the `wp-user-teams` directory into `wp-content/plugins/`.
-2. Activate it.
-   - On multisite, **network-activate** the plugin (it's marked `Network: true`).
-
 ## Usage
 
 ### Creating a team
