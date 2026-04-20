@@ -66,6 +66,7 @@ class WP_User_Teams {
 		add_action( 'pre_user_query', array( $this, 'exclude_team_users_by_default' ) );
 		add_filter( 'rest_user_query', array( $this, 'exclude_team_users_from_rest' ) );
 		add_filter( 'authenticate', array( $this, 'block_team_user_login' ), 100, 3 );
+		add_filter( 'allow_password_reset', array( $this, 'block_team_user_password_reset' ), 10, 2 );
 
 		add_filter( 'get_blogs_of_user', array( $this, 'filter_get_blogs_of_user' ), 10, 3 );
 		add_action( 'wp_delete_site', array( $this, 'on_site_deleted' ) );
@@ -550,6 +551,19 @@ class WP_User_Teams {
 			);
 		}
 		return $user;
+	}
+
+	/**
+	 * Blocks password-reset attempts against team accounts — they have
+	 * no real user behind them, so emailing a reset link would either
+	 * bounce (`@teams.internal`) or, worse, hand over access via whatever
+	 * mail route is configured.
+	 */
+	public function block_team_user_password_reset( $allow, $user_id ) {
+		if ( self::is_team_user( $user_id ) ) {
+			return false;
+		}
+		return $allow;
 	}
 
 	public static function is_team_user( $user_id ) {

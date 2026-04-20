@@ -46,6 +46,7 @@ class WP_User_Teams_Admin {
 		// which fires before the user forms open.
 		add_action( 'admin_notices', array( $this, 'render_user_new_notice' ) );
 		add_action( 'admin_notices', array( $this, 'maybe_render_add_team_to_site_section' ) );
+		add_action( 'admin_notices', array( $this, 'render_users_screen_notice' ) );
 
 		// "Teams" column appears on Network Admin → Users. Per-site
 		// users.php keeps only the "Role (via Team)" disclosure via
@@ -679,6 +680,31 @@ class WP_User_Teams_Admin {
 	 * Displays the success/error notice set by
 	 * `handle_attach_team_to_site` when it redirects back to user-new.php.
 	 */
+	/**
+	 * Per-site users.php notices for the "Remove from site" row action —
+	 * the admin-post handler redirects here instead of the Teams page
+	 * because site admins don't have access to it.
+	 */
+	public function render_users_screen_notice() {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen || 'users' !== $screen->base ) {
+			return;
+		}
+		$notice = isset( $_GET['wput_notice'] ) ? sanitize_key( wp_unslash( $_GET['wput_notice'] ) ) : '';
+		$map    = array(
+			'site-removed'       => array( 'success', __( 'Team removed from this site.', 'wp-user-teams' ) ),
+			'site-remove-failed' => array( 'error',   __( 'The team could not be removed from this site.', 'wp-user-teams' ) ),
+		);
+		if ( ! isset( $map[ $notice ] ) ) {
+			return;
+		}
+		printf(
+			'<div class="notice notice-%1$s is-dismissible"><p>%2$s</p></div>',
+			esc_attr( $map[ $notice ][0] ),
+			esc_html( $map[ $notice ][1] )
+		);
+	}
+
 	public function render_user_new_notice() {
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
 		if ( ! $screen || 'user' !== $screen->base ) {
@@ -849,20 +875,24 @@ class WP_User_Teams_Admin {
 
 	/**
 	 * Remove a site's role grant from a team.
+	 *
+	 * Two entry paths: the network Teams edit page (super admin), and
+	 * the per-site users.php "Remove from site" row action (site admin
+	 * with `promote_users`). Auth and redirect target differ by path.
 	 */
 	public function handle_remove_site() {
 		check_admin_referer( self::NONCE_ACTION );
 
-		if ( ! $this->current_user_can_manage() ) {
-			wp_die( esc_html__( 'You do not have permission to manage teams.', 'wp-user-teams' ) );
-		}
-
 		$team_id = (int) ( $_GET['team_id'] ?? 0 );
 		$blog_id = (int) ( $_GET['blog_id'] ?? 0 );
 
+		if ( ! current_user_can_for_blog( $blog_id ?: get_current_blog_id(), 'promote_users' ) ) {
+			wp_die( esc_html__( 'You do not have permission to manage users on this site.', 'wp-user-teams' ) );
+		}
+
 		$team = WP_User_Teams::get_team( $team_id );
 		if ( ! $team || $blog_id <= 0 ) {
-			$this->redirect_with_notice( 'save-failed' );
+			$this->redirect_after_remove_site( 'save-failed' );
 			return;
 		}
 
@@ -870,7 +900,20 @@ class WP_User_Teams_Admin {
 		unset( $site_roles[ $blog_id ] );
 		WP_User_Teams::set_team_sites( $team_id, $site_roles );
 
-		wp_safe_redirect( $this->page_url( array( 'action' => 'edit', 'team_id' => $team_id, 'notice' => 'saved' ) ) );
+		$this->redirect_after_remove_site( 'saved', $team_id );
+	}
+
+	/**
+	 * Network-admin callers go back to the team edit page; per-site
+	 * callers (who may not have access to the Teams admin) go back to
+	 * users.php with a dismissible notice.
+	 */
+	private function redirect_after_remove_site( $notice, $team_id = 0 ) {
+		if ( is_network_admin() && current_user_can( self::required_cap() ) ) {
+			wp_safe_redirect( $this->page_url( array( 'action' => 'edit', 'team_id' => (int) $team_id, 'notice' => $notice ) ) );
+			exit;
+		}
+		wp_safe_redirect( add_query_arg( 'wput_notice', 'saved' === $notice ? 'site-removed' : 'site-remove-failed', admin_url( 'users.php' ) ) );
 		exit;
 	}
 
