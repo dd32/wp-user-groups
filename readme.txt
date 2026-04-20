@@ -12,12 +12,14 @@ Unix-style user groups for WordPress multisite. Create a team, give it a role, d
 
 == Description ==
 
-**Multisite-only by design.** On a large network, granting a group of people the same role across many sites usually means adding each user to each site by hand — and remembering to remove them everywhere when they leave. User Teams turns that into:
+On a large multisite network, granting a group of people the same role across many sites usually means adding each user to each site by hand — and remembering to remove them everywhere when they leave. User Teams turns that into:
 
 1. Create a team, pick a role.
 2. Add the user to the team.
 3. They have that role everywhere the team applies.
 4. Remove them from the team → access is gone everywhere.
+
+User Teams is multisite-only by design — on a single-site install, native WordPress roles and capabilities already cover the whole feature set, so WordPress won't offer it for activation there.
 
 = Features =
 
