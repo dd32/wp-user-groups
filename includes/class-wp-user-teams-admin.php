@@ -124,18 +124,14 @@ class WP_User_Teams_Admin {
 	}
 
 	public function print_team_row_styles() {
-		global $wpdb;
-		$team_ids = $wpdb->get_col(
-			$wpdb->prepare(
-				"SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = %s AND meta_value = %s",
-				WP_User_Teams::IS_TEAM_META_KEY,
-				'1'
-			)
-		);
-		if ( empty( $team_ids ) ) {
+		$team_names = array();
+		foreach ( WP_User_Teams::get_all_teams() as $team_id => $team ) {
+			$team_names[ (int) $team_id ] = $team['name'];
+		}
+		if ( empty( $team_names ) ) {
 			return;
 		}
-		$ids_int   = array_map( 'intval', $team_ids );
+		$ids_int   = array_keys( $team_names );
 		$selectors = array_map( fn( $id ) => '#user-' . $id, $ids_int );
 		$sel       = implode( ",\n", $selectors );
 		echo <<<CSS
@@ -178,33 +174,79 @@ class WP_User_Teams_Admin {
 		CSS;
 		echo "\n";
 
-		$ids_json = wp_json_encode( $ids_int );
+		$team_names_json = wp_json_encode( $team_names );
+		$member_teams    = wp_json_encode( $this->collect_member_team_names_for_screen() );
 		?>
 		<script>
 		( function () {
-			var ids = <?php echo $ids_json; ?>;
+			var teamNames  = <?php echo $team_names_json; ?>;
+			var memberTeams = <?php echo $member_teams; ?>;
 			document.addEventListener( 'DOMContentLoaded', function () {
-				ids.forEach( function ( id ) {
+				Object.keys( teamNames ).forEach( function ( id ) {
 					var row = document.getElementById( 'user-' + id );
 					if ( ! row ) { return; }
+					var displayName = teamNames[ id ];
 
-					// Strip the `_team_*` login text from the username cell.
-					// The markup is `<strong><a>Display</a></strong><br />login`.
+					// Walk text nodes in the username cell. The `_team_*`
+					// login appears either inside the `<a>` (network Users
+					// list) or as a sibling text node after `<br />`
+					// (per-site Users list). Replace the in-link text with
+					// the team's display name; drop the sibling copy.
 					var username = row.querySelector( '.column-username' );
-					if ( username ) {
-						var walker = document.createTreeWalker( username, NodeFilter.SHOW_TEXT );
-						var victims = [];
-						while ( walker.nextNode() ) {
-							var t = walker.currentNode.nodeValue;
-							if ( t && /^\s*_team_/.test( t ) ) { victims.push( walker.currentNode ); }
+					if ( ! username ) { return; }
+					var walker = document.createTreeWalker( username, NodeFilter.SHOW_TEXT );
+					var inLink = [];
+					var outside = [];
+					while ( walker.nextNode() ) {
+						var node = walker.currentNode;
+						if ( ! /^\s*_team_/.test( node.nodeValue ) ) { continue; }
+						if ( node.parentNode && node.parentNode.tagName === 'A' ) {
+							inLink.push( node );
+						} else {
+							outside.push( node );
 						}
-						victims.forEach( function ( n ) { n.parentNode.removeChild( n ); } );
 					}
+					inLink.forEach( function ( n ) { n.nodeValue = displayName; } );
+					outside.forEach( function ( n ) { n.parentNode.removeChild( n ); } );
+				} );
+
+				// Append " — Team A, Team B" to member usernames, matching
+				// WP's own "— Super Admin" marker. Skip team-user rows.
+				Object.keys( memberTeams ).forEach( function ( uid ) {
+					var row = document.getElementById( 'user-' + uid );
+					if ( ! row ) { return; }
+					if ( teamNames[ uid ] ) { return; }
+					var strong = row.querySelector( '.column-username strong' );
+					if ( ! strong ) { return; }
+					strong.appendChild( document.createTextNode( ' \u2014 ' + memberTeams[ uid ].join( ', ' ) ) );
 				} );
 			} );
 		} )();
 		</script>
 		<?php
+	}
+
+	/**
+	 * Map of `user_id => [team_name, ...]` for users whose teams are in
+	 * scope for the current Users screen. Per-site screens limit to
+	 * teams that apply to the current blog; the network screen includes
+	 * every team membership.
+	 */
+	private function collect_member_team_names_for_screen() {
+		$screen  = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		$network = $screen && 'users-network' === $screen->base;
+		$blog_id = (int) get_current_blog_id();
+
+		$out = array();
+		foreach ( WP_User_Teams::get_all_teams() as $team_id => $team ) {
+			if ( ! $network && ! WP_User_Teams::team_applies_to_site( $team_id, $blog_id ) ) {
+				continue;
+			}
+			foreach ( WP_User_Teams::get_team_members( $team_id ) as $uid ) {
+				$out[ (int) $uid ][] = $team['name'];
+			}
+		}
+		return $out;
 	}
 
 	/* ------------------------------------------------------------------
