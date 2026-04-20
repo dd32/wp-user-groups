@@ -162,17 +162,13 @@ class WP_User_Teams_Admin {
 		{$sel} .column-username > span:not(.wput-role) {
 			display: none;
 		}
-		/* Dim the placeholder email so it's visually out of the way but still accessible. */
+		/* Drop the placeholder `*@teams.internal` mailto — show a dash instead. */
 		{$sel} .column-email a {
-			color: transparent;
-			position: relative;
+			display: none;
 		}
-		{$sel} .column-email a::before {
+		{$sel} .column-email::before {
 			content: '—';
 			color: #646970;
-			position: absolute;
-			left: 0;
-			top: 0;
 		}
 		</style>
 		CSS;
@@ -199,15 +195,6 @@ class WP_User_Teams_Admin {
 							if ( t && /^\s*_team_/.test( t ) ) { victims.push( walker.currentNode ); }
 						}
 						victims.forEach( function ( n ) { n.parentNode.removeChild( n ); } );
-					}
-
-					// Replace the `@teams.internal` mailto with a plain dash.
-					var email = row.querySelector( '.column-email' );
-					if ( email ) {
-						var link = email.querySelector( 'a[href^="mailto:"]' );
-						if ( link && /@teams\.internal\b/i.test( link.textContent ) ) {
-							email.textContent = '\u2014';
-						}
 					}
 				} );
 			} );
@@ -981,22 +968,27 @@ class WP_User_Teams_Admin {
 
 		// For team-user rows on the Users list, show the role the team
 		// grants on this site. A per-site role is already reflected in
-		// the team's capabilities meta (native `$user->roles`); a
-		// team with only a Global Role would otherwise appear roleless,
-		// so resolve it from `$team['role']` here.
+		// the team's capabilities meta (native `$user->roles`); a team
+		// with only a Global Role would otherwise appear roleless, so
+		// resolve it from `$team['role']` here. If there's no role to
+		// show, swap WP's "None" for an em-dash so the column reads as
+		// "no grant here" instead of "no role at all".
 		if ( WP_User_Teams::is_team_user( $user->ID ) ) {
 			if ( ! empty( $user->roles ) ) {
 				return $role_list;
 			}
-			$team = WP_User_Teams::get_team( $user->ID );
-			if ( ! $team || empty( $team['role'] ) || ! isset( $role_names[ $team['role'] ] ) ) {
-				return $role_list;
+			$team  = WP_User_Teams::get_team( $user->ID );
+			$label = ( $team && ! empty( $team['role'] ) && isset( $role_names[ $team['role'] ] ) )
+				? translate_user_role( $role_names[ $team['role'] ] )
+				: '';
+
+			if ( '' === $label ) {
+				return is_array( $role_list ) ? array( '—' ) : '—';
 			}
-			$label = translate_user_role( $role_names[ $team['role'] ] );
 			if ( is_array( $role_list ) ) {
-				return array_merge( (array) $role_list, array( $label ) );
+				return array( $label );
 			}
-			return '' !== (string) $role_list ? $role_list . ', ' . $label : $label;
+			return $label;
 		}
 
 		$native     = array_map( 'strval', (array) $user->roles );
