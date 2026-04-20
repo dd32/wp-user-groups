@@ -1015,10 +1015,15 @@ class WP_User_Teams_Admin {
 			return $role_list;
 		}
 
-		// $role_list is an array of role labels in WP 6.4+ and a string in
-		// older WP. Handle both.
+		// Drop WP's default "None" entry when we're adding team-derived
+		// roles — the user *does* have a role here, just via their team.
 		if ( is_array( $role_list ) ) {
+			unset( $role_list['none'] );
 			return array_merge( $role_list, array_values( $team_entries ) );
+		}
+		$none = _x( 'None', 'no user roles' );
+		if ( $role_list === $none ) {
+			return implode( ', ', $team_entries );
 		}
 		return $role_list . ' + ' . implode( ', ', $team_entries );
 	}
