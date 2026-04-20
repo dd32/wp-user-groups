@@ -88,9 +88,13 @@ if ( user_can( $user_id, 'edit_others_posts' ) ) {
 }
 `
 
+= Where's development happening? =
+
+On GitHub at [dd32/wp-user-teams](https://github.com/dd32/wp-user-teams). That's where the source, issues, pull requests, and release tags live.
+
 = I have a bug report or feature request =
 
-You can report bugs on [GitHub](https://github.com/dd32/wp-user-teams) and get support in the [WordPress.org Support Forums](https://wordpress.org/support/plugin/user-teams/).
+File it on [GitHub](https://github.com/dd32/wp-user-teams/issues). General support questions belong in the [WordPress.org Support Forums](https://wordpress.org/support/plugin/user-teams/).
 
 == Changelog ==
 

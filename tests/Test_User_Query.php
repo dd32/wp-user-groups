@@ -300,16 +300,12 @@ class Test_User_Query extends WP_UnitTestCase {
 
 		$user = new WP_User( $uid );
 
-		// WP 6.4+ passes an array; older WP passes a string.
-		$result_arr = $this->admin->disclose_team_roles_in_users_list( array( 'Subscriber' ), $user );
-		$this->assertIsArray( $result_arr );
-		$this->assertCount( 2, $result_arr );
-		$this->assertStringContainsString( 'Editor', $result_arr[1] );
-		$this->assertStringContainsString( 'via Bonus', $result_arr[1] );
-
-		$result_str = $this->admin->disclose_team_roles_in_users_list( 'Subscriber', $user );
-		$this->assertIsString( $result_str );
-		$this->assertStringContainsString( 'via Bonus', $result_str );
+		// `get_role_list` has passed an array since WP 6.2; plugin requires 6.9+.
+		$result = $this->admin->disclose_team_roles_in_users_list( array( 'Subscriber' ), $user );
+		$this->assertIsArray( $result );
+		$this->assertCount( 2, $result );
+		$this->assertStringContainsString( 'Editor', $result[1] );
+		$this->assertStringContainsString( 'via Bonus', $result[1] );
 	}
 
 	public function test_role_list_unchanged_when_user_already_has_team_role_natively() {

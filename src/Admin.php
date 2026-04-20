@@ -1069,13 +1069,15 @@ class Admin {
 		$blog_id    = (int) get_current_blog_id();
 		$role_names = wp_roles()->get_names();
 
+		// `get_role_list` always passes an array on WP 6.2+.
+		// `Requires at least: 6.9` makes the old string shape unreachable.
+
 		// For team-user rows on the Users list, show the role the team
 		// grants on this site. A per-site role is already reflected in
 		// the team's capabilities meta (native `$user->roles`); a team
 		// with only a Global Role would otherwise appear roleless, so
 		// resolve it from `$team['role']` here. If there's no role to
-		// show, swap WP's "None" for an em-dash so the column reads as
-		// "no grant here" instead of "no role at all".
+		// show, return an em-dash instead of letting WP's "None" through.
 		if ( Plugin::is_team_user( $user->ID ) ) {
 			if ( ! empty( $user->roles ) ) {
 				return $role_list;
@@ -1084,18 +1086,10 @@ class Admin {
 			$label = ( $team && ! empty( $team['role'] ) && isset( $role_names[ $team['role'] ] ) )
 				? translate_user_role( $role_names[ $team['role'] ] )
 				: '';
-
-			if ( '' === $label ) {
-				return is_array( $role_list ) ? array( '—' ) : '—';
-			}
-			if ( is_array( $role_list ) ) {
-				return array( $label );
-			}
-			return $label;
+			return '' !== $label ? array( $label ) : array( '—' );
 		}
 
-		$native     = array_map( 'strval', (array) $user->roles );
-
+		$native       = array_map( 'strval', (array) $user->roles );
 		$team_entries = array();
 		foreach ( Plugin::get_user_teams( $user->ID ) as $team_id => $team ) {
 			if ( ! Plugin::team_applies_to_site( $team_id, $blog_id ) ) {
@@ -1118,17 +1112,10 @@ class Admin {
 			return $role_list;
 		}
 
-		// Drop WP's default "None" entry when we're adding team-derived
-		// roles — the user *does* have a role here, just via their team.
-		if ( is_array( $role_list ) ) {
-			unset( $role_list['none'] );
-			return array_merge( $role_list, array_values( $team_entries ) );
-		}
-		$none = _x( 'None', 'no user roles', 'default' );
-		if ( $role_list === $none ) {
-			return implode( ', ', $team_entries );
-		}
-		return $role_list . ' + ' . implode( ', ', $team_entries );
+		// When we're contributing team roles, drop WP's default "None"
+		// entry — the user *does* have a role here, just via their team.
+		unset( $role_list['none'] );
+		return array_merge( (array) $role_list, array_values( $team_entries ) );
 	}
 
 	/* ------------------------------------------------------------------
