@@ -46,6 +46,7 @@ class WP_User_Teams_Admin {
 		// which fires before the user forms open.
 		add_action( 'admin_notices', array( $this, 'render_user_new_notice' ) );
 		add_action( 'admin_notices', array( $this, 'maybe_render_add_team_to_site_section' ) );
+		add_action( 'admin_notices', array( $this, 'render_users_screen_notice' ) );
 
 		// "Teams" column appears on Network Admin → Users. Per-site
 		// users.php keeps only the "Role (via Team)" disclosure via
@@ -62,12 +63,206 @@ class WP_User_Teams_Admin {
 		add_filter( 'views_users-network', array( $this, 'filter_user_views' ) );
 		add_action( 'pre_get_users', array( $this, 'apply_team_filter_to_query' ) );
 
-		// Per-site Users screen: render a "Teams covering this site"
-		// table as styled first-rows in #the-list, and include team
-		// members in the main list even when they lack native caps
-		// meta for the current blog.
-		add_action( 'admin_notices', array( $this, 'render_site_team_coverage_table' ) );
+		// Per-site Users screen: include team members in the list even
+		// when they lack native caps meta for the current blog.
 		add_action( 'pre_user_query', array( $this, 'include_team_members_in_user_query' ) );
+
+		// On Users list screens, opt team accounts back into the user
+		// query (they're globally excluded by WP_User_Teams). Team
+		// accounts have native capabilities meta for the sites they
+		// cover, so WP_Users_List_Table renders them as real rows.
+		add_action( 'pre_get_users', array( $this, 'include_team_users_on_users_screens' ), 5 );
+
+		// Replace the default row actions on team-account rows with
+		// team-specific ones (Edit team / Remove from site).
+		add_filter( 'user_row_actions', array( $this, 'filter_user_row_actions' ), 10, 2 );
+
+		// Style team account rows distinctly (background, "Team" badge
+		// before the login) on both the per-site and network users lists.
+		add_action( 'admin_head', array( $this, 'print_team_row_styles' ) );
+	}
+
+	public function include_team_users_on_users_screens( $query ) {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen ) {
+			return;
+		}
+		if ( 'users' !== $screen->base && 'users-network' !== $screen->base ) {
+			return;
+		}
+		$query->set( WP_User_Teams::QUERY_INCLUDE_FLAG, true );
+	}
+
+	public function filter_user_row_actions( $actions, $user ) {
+		if ( ! $user instanceof WP_User || ! WP_User_Teams::is_team_user( $user->ID ) ) {
+			return $actions;
+		}
+		// Teams are a network-wide concept managed from Network Admin →
+		// Users → Teams. Only super admins see actions on team rows;
+		// regular site admins get an empty action list (they still see
+		// the row, just not the links).
+		if ( ! current_user_can( self::required_cap() ) ) {
+			return array();
+		}
+		$edit_url   = $this->page_url( array( 'action' => 'edit', 'team_id' => (int) $user->ID ) );
+		$remove_url = wp_nonce_url(
+			add_query_arg(
+				array(
+					'action'  => 'wp_user_teams_remove_site',
+					'team_id' => (int) $user->ID,
+					'blog_id' => (int) get_current_blog_id(),
+				),
+				admin_url( 'admin-post.php' )
+			),
+			self::NONCE_ACTION
+		);
+		return array(
+			'wput-edit-team'        => '<a href="' . esc_url( $edit_url ) . '">' . esc_html__( 'Edit team', 'wp-user-teams' ) . '</a>',
+			'wput-remove-from-site' => '<a href="' . esc_url( $remove_url ) . '" class="submitdelete" onclick="return confirm(\'' . esc_js( __( 'Remove this team from the site? Members lose the team-granted role here.', 'wp-user-teams' ) ) . '\');">' . esc_html__( 'Remove from site', 'wp-user-teams' ) . '</a>',
+		);
+	}
+
+	public function print_team_row_styles() {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen || ( 'users' !== $screen->base && 'users-network' !== $screen->base ) ) {
+			return;
+		}
+		$team_names = array();
+		foreach ( WP_User_Teams::get_all_teams() as $team_id => $team ) {
+			$team_names[ (int) $team_id ] = $team['name'];
+		}
+		if ( empty( $team_names ) ) {
+			return;
+		}
+		// Target a class rather than `#user-{id}` because the network
+		// users list (`WP_MS_Users_List_Table::display_rows`) renders
+		// `<tr>` without an id. The JS below tags both per-site and
+		// network team rows with `wput-team-row`.
+		echo <<<'CSS'
+		<style>
+		tr.wput-team-row {
+			background: #f6f7f7;
+		}
+		tr.wput-team-row td {
+			border-top: 3px solid #e5e5e5;
+		}
+		tr.wput-team-row .column-username strong::before {
+			content: 'Team';
+			display: inline-block;
+			font-size: 10px;
+			text-transform: uppercase;
+			letter-spacing: 0.04em;
+			font-weight: 600;
+			color: #2271b1;
+			background: #e7f1fb;
+			border-radius: 3px;
+			padding: 2px 6px;
+			margin-right: 6px;
+			vertical-align: middle;
+		}
+		/* Hide the auto-generated `_team_*` login line in the username cell. */
+		tr.wput-team-row .column-username .row-actions + br + span,
+		tr.wput-team-row .column-username > br,
+		tr.wput-team-row .column-username > span:not(.wput-role) {
+			display: none;
+		}
+		/* Drop the placeholder `*@teams.internal` mailto — show a dash instead. */
+		tr.wput-team-row .column-email a {
+			display: none;
+		}
+		tr.wput-team-row .column-email::before {
+			content: '—';
+			color: #646970;
+		}
+		</style>
+		CSS;
+		echo "\n";
+
+		$team_names_json = wp_json_encode( $team_names );
+		$member_teams    = wp_json_encode( $this->collect_member_team_names_for_screen() );
+		?>
+		<script>
+		( function () {
+			var teamNames  = <?php echo $team_names_json; ?>;
+			var memberTeams = <?php echo $member_teams; ?>;
+
+			// Per-site Users list gives each row `id="user-{id}"`. The
+			// network list's `<tr>` has no id — find it by the bulk
+			// checkbox `#blog_{id}`. Returns `null` if neither is on page.
+			function findUserRow( id ) {
+				var row = document.getElementById( 'user-' + id );
+				if ( row ) { return row; }
+				var cb = document.getElementById( 'blog_' + id );
+				return cb ? cb.closest( 'tr' ) : null;
+			}
+
+			document.addEventListener( 'DOMContentLoaded', function () {
+				Object.keys( teamNames ).forEach( function ( id ) {
+					var row = findUserRow( id );
+					if ( ! row ) { return; }
+					row.classList.add( 'wput-team-row' );
+					var displayName = teamNames[ id ];
+
+					// Walk text nodes in the username cell. The `_team_*`
+					// login appears either inside the `<a>` (network Users
+					// list) or as a sibling text node after `<br />`
+					// (per-site Users list). Replace the in-link text with
+					// the team's display name; drop the sibling copy.
+					var username = row.querySelector( '.column-username' );
+					if ( ! username ) { return; }
+					var walker = document.createTreeWalker( username, NodeFilter.SHOW_TEXT );
+					var inLink = [];
+					var outside = [];
+					while ( walker.nextNode() ) {
+						var node = walker.currentNode;
+						if ( ! /^\s*_team_/.test( node.nodeValue ) ) { continue; }
+						if ( node.parentNode && node.parentNode.tagName === 'A' ) {
+							inLink.push( node );
+						} else {
+							outside.push( node );
+						}
+					}
+					inLink.forEach( function ( n ) { n.nodeValue = displayName; } );
+					outside.forEach( function ( n ) { n.parentNode.removeChild( n ); } );
+				} );
+
+				// Append " — Team A, Team B" to member usernames, matching
+				// WP's own "— Super Admin" marker. Skip team-user rows.
+				Object.keys( memberTeams ).forEach( function ( uid ) {
+					if ( teamNames[ uid ] ) { return; }
+					var row = findUserRow( uid );
+					if ( ! row ) { return; }
+					var strong = row.querySelector( '.column-username strong' );
+					if ( ! strong ) { return; }
+					strong.appendChild( document.createTextNode( ' \u2014 ' + memberTeams[ uid ].join( ', ' ) ) );
+				} );
+			} );
+		} )();
+		</script>
+		<?php
+	}
+
+	/**
+	 * Map of `user_id => [team_name, ...]` for users whose teams are in
+	 * scope for the current Users screen. Per-site screens limit to
+	 * teams that apply to the current blog; the network screen includes
+	 * every team membership.
+	 */
+	private function collect_member_team_names_for_screen() {
+		$screen  = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		$network = $screen && 'users-network' === $screen->base;
+		$blog_id = (int) get_current_blog_id();
+
+		$out = array();
+		foreach ( WP_User_Teams::get_all_teams() as $team_id => $team ) {
+			if ( ! $network && ! WP_User_Teams::team_applies_to_site( $team_id, $blog_id ) ) {
+				continue;
+			}
+			foreach ( WP_User_Teams::get_team_members( $team_id ) as $uid ) {
+				$out[ (int) $uid ][] = $team['name'];
+			}
+		}
+		return $out;
 	}
 
 	/* ------------------------------------------------------------------
@@ -546,6 +741,31 @@ class WP_User_Teams_Admin {
 	 * Displays the success/error notice set by
 	 * `handle_attach_team_to_site` when it redirects back to user-new.php.
 	 */
+	/**
+	 * Per-site users.php notices for the "Remove from site" row action —
+	 * the admin-post handler redirects here instead of the Teams page
+	 * because site admins don't have access to it.
+	 */
+	public function render_users_screen_notice() {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen || 'users' !== $screen->base ) {
+			return;
+		}
+		$notice = isset( $_GET['wput_notice'] ) ? sanitize_key( wp_unslash( $_GET['wput_notice'] ) ) : '';
+		$map    = array(
+			'site-removed'       => array( 'success', __( 'Team removed from this site.', 'wp-user-teams' ) ),
+			'site-remove-failed' => array( 'error',   __( 'The team could not be removed from this site.', 'wp-user-teams' ) ),
+		);
+		if ( ! isset( $map[ $notice ] ) ) {
+			return;
+		}
+		printf(
+			'<div class="notice notice-%1$s is-dismissible"><p>%2$s</p></div>',
+			esc_attr( $map[ $notice ][0] ),
+			esc_html( $map[ $notice ][1] )
+		);
+	}
+
 	public function render_user_new_notice() {
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
 		if ( ! $screen || 'user' !== $screen->base ) {
@@ -716,6 +936,9 @@ class WP_User_Teams_Admin {
 
 	/**
 	 * Remove a site's role grant from a team.
+	 *
+	 * Super-admin only — teams are a network-wide concept. The per-site
+	 * row action is also only shown to super admins.
 	 */
 	public function handle_remove_site() {
 		check_admin_referer( self::NONCE_ACTION );
@@ -724,20 +947,28 @@ class WP_User_Teams_Admin {
 			wp_die( esc_html__( 'You do not have permission to manage teams.', 'wp-user-teams' ) );
 		}
 
-		$team_id = (int) ( $_GET['team_id'] ?? 0 );
-		$blog_id = (int) ( $_GET['blog_id'] ?? 0 );
+		$team_id  = (int) ( $_GET['team_id'] ?? 0 );
+		$blog_id  = (int) ( $_GET['blog_id'] ?? 0 );
+		$from_net = is_network_admin();
 
-		$team = WP_User_Teams::get_team( $team_id );
-		if ( ! $team || $blog_id <= 0 ) {
-			$this->redirect_with_notice( 'save-failed' );
-			return;
+		$team   = WP_User_Teams::get_team( $team_id );
+		$notice = 'save-failed';
+		if ( $team && $blog_id > 0 ) {
+			$site_roles = $team['sites'];
+			unset( $site_roles[ $blog_id ] );
+			WP_User_Teams::set_team_sites( $team_id, $site_roles );
+			$notice = 'saved';
 		}
 
-		$site_roles = $team['sites'];
-		unset( $site_roles[ $blog_id ] );
-		WP_User_Teams::set_team_sites( $team_id, $site_roles );
-
-		wp_safe_redirect( $this->page_url( array( 'action' => 'edit', 'team_id' => $team_id, 'notice' => 'saved' ) ) );
+		if ( $from_net ) {
+			wp_safe_redirect( $this->page_url( array( 'action' => 'edit', 'team_id' => $team_id, 'notice' => $notice ) ) );
+		} else {
+			wp_safe_redirect( add_query_arg(
+				'wput_notice',
+				'saved' === $notice ? 'site-removed' : 'site-remove-failed',
+				admin_url( 'users.php' )
+			) );
+		}
 		exit;
 	}
 
@@ -831,8 +1062,34 @@ class WP_User_Teams_Admin {
 		}
 
 		$blog_id    = (int) get_current_blog_id();
-		$native     = array_map( 'strval', (array) $user->roles );
 		$role_names = wp_roles()->get_names();
+
+		// For team-user rows on the Users list, show the role the team
+		// grants on this site. A per-site role is already reflected in
+		// the team's capabilities meta (native `$user->roles`); a team
+		// with only a Global Role would otherwise appear roleless, so
+		// resolve it from `$team['role']` here. If there's no role to
+		// show, swap WP's "None" for an em-dash so the column reads as
+		// "no grant here" instead of "no role at all".
+		if ( WP_User_Teams::is_team_user( $user->ID ) ) {
+			if ( ! empty( $user->roles ) ) {
+				return $role_list;
+			}
+			$team  = WP_User_Teams::get_team( $user->ID );
+			$label = ( $team && ! empty( $team['role'] ) && isset( $role_names[ $team['role'] ] ) )
+				? translate_user_role( $role_names[ $team['role'] ] )
+				: '';
+
+			if ( '' === $label ) {
+				return is_array( $role_list ) ? array( '—' ) : '—';
+			}
+			if ( is_array( $role_list ) ) {
+				return array( $label );
+			}
+			return $label;
+		}
+
+		$native     = array_map( 'strval', (array) $user->roles );
 
 		$team_entries = array();
 		foreach ( WP_User_Teams::get_user_teams( $user->ID ) as $team_id => $team ) {
@@ -856,10 +1113,15 @@ class WP_User_Teams_Admin {
 			return $role_list;
 		}
 
-		// $role_list is an array of role labels in WP 6.4+ and a string in
-		// older WP. Handle both.
+		// Drop WP's default "None" entry when we're adding team-derived
+		// roles — the user *does* have a role here, just via their team.
 		if ( is_array( $role_list ) ) {
+			unset( $role_list['none'] );
 			return array_merge( $role_list, array_values( $team_entries ) );
+		}
+		$none = _x( 'None', 'no user roles' );
+		if ( $role_list === $none ) {
+			return implode( ', ', $team_entries );
 		}
 		return $role_list . ' + ' . implode( ', ', $team_entries );
 	}
@@ -930,11 +1192,26 @@ class WP_User_Teams_Admin {
 	 * @param WP_User_Query $query
 	 */
 	public function include_team_members_in_user_query( $query ) {
+		// Reentrancy guard: this callback runs `get_all_teams()` internally,
+		// which issues its own `WP_User_Query`. Without the guard we'd
+		// recurse back into ourselves.
+		static $running = false;
+		if ( $running ) {
+			return;
+		}
 		$blog_id = (int) $query->get( 'blog_id' );
 		if ( $blog_id <= 0 ) {
 			return;
 		}
+		$running = true;
+		try {
+			$this->apply_team_member_injection( $query, $blog_id );
+		} finally {
+			$running = false;
+		}
+	}
 
+	private function apply_team_member_injection( $query, $blog_id ) {
 		$team_filter = (int) ( $_GET['team'] ?? 0 );
 		$role_filter = (string) $query->get( 'role' );
 		$search      = (string) $query->get( 'search' );
