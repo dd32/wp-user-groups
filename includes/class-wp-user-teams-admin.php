@@ -79,8 +79,7 @@ class WP_User_Teams_Admin {
 
 		// Style team account rows distinctly (background, "Team" badge
 		// before the login) on both the per-site and network users lists.
-		add_action( 'admin_head-users.php', array( $this, 'print_team_row_styles' ) );
-		add_action( 'admin_head-users-network.php', array( $this, 'print_team_row_styles' ) );
+		add_action( 'admin_head', array( $this, 'print_team_row_styles' ) );
 	}
 
 	public function include_team_users_on_users_screens( $query ) {
@@ -124,6 +123,10 @@ class WP_User_Teams_Admin {
 	}
 
 	public function print_team_row_styles() {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen || ( 'users' !== $screen->base && 'users-network' !== $screen->base ) ) {
+			return;
+		}
 		$team_names = array();
 		foreach ( WP_User_Teams::get_all_teams() as $team_id => $team ) {
 			$team_names[ (int) $team_id ] = $team['name'];
