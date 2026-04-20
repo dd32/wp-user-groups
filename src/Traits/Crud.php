@@ -85,6 +85,26 @@ trait Crud {
 			$role = '';
 		}
 
+		/**
+		 * Filters the sanitised team data right before it's persisted.
+		 *
+		 * Only `name`, `slug`, and `role` are respected by the core
+		 * writer; extension keys ride along for third-party meta.
+		 *
+		 * @param array    $data    Sanitised `name` / `slug` / `role` + extras.
+		 * @param int|null $team_id Team ID when updating; `null` when creating.
+		 * @param string   $op      `'create'` or `'update'`.
+		 */
+		$data = (array) apply_filters(
+			'wput_team_save_data',
+			array( 'name' => $name, 'slug' => $slug, 'role' => $role ),
+			null,
+			'create'
+		);
+		$name = isset( $data['name'] ) ? (string) $data['name'] : $name;
+		$slug = isset( $data['slug'] ) ? (string) $data['slug'] : $slug;
+		$role = isset( $data['role'] ) ? (string) $data['role'] : $role;
+
 		$login = self::LOGIN_PREFIX . $slug;
 		// Collisions on user_login go through the same unique_slug path —
 		// if someone created a literal `_team_foo` user, bump the slug.
@@ -126,6 +146,9 @@ trait Crud {
 		if ( ! self::get_team( $team_id ) ) {
 			return new WP_Error( 'not_found', __( 'Team not found.', 'wp-user-teams' ) );
 		}
+
+		/** This filter is documented in src/Traits/Crud.php */
+		$data = (array) apply_filters( 'wput_team_save_data', $data, $team_id, 'update' );
 
 		if ( isset( $data['name'] ) ) {
 			$name = sanitize_text_field( $data['name'] );

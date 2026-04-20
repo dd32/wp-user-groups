@@ -60,16 +60,32 @@ trait SiteScope {
 		return true;
 	}
 
+	/**
+	 * A team applies to a site when it has a Global Role (network-wide
+	 * coverage) or an explicit per-site grant for that blog.
+	 *
+	 * Filterable via `wput_team_applies_to_site` for callers that want to
+	 * gate coverage (e.g. pause a team during a freeze, or restrict to
+	 * sites matching a pattern).
+	 */
 	public static function team_applies_to_site( $team_id, $blog_id = null ) {
 		$team = self::get_team( $team_id );
 		if ( ! $team ) {
 			return false;
 		}
-		if ( ! empty( $team['role'] ) ) {
-			return true; // Global Role = network-wide.
-		}
 		$blog_id = $blog_id ? (int) $blog_id : (int) get_current_blog_id();
-		return array_key_exists( $blog_id, $team['sites'] );
+		$applies = ! empty( $team['role'] ) || array_key_exists( $blog_id, $team['sites'] );
+
+		/**
+		 * Filters whether a team applies (i.e. can grant anything) to a
+		 * given blog.
+		 *
+		 * @param bool  $applies  Whether the team covers the blog.
+		 * @param int   $team_id  Team (user) ID.
+		 * @param int   $blog_id  Blog ID being checked.
+		 * @param array $team     Full team record, including `role` and `sites`.
+		 */
+		return (bool) apply_filters( 'wput_team_applies_to_site', $applies, (int) $team_id, $blog_id, $team );
 	}
 
 	/**
