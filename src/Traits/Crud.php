@@ -71,7 +71,7 @@ trait Crud {
 	public static function create_team( $name, $slug = '', $role = '' ) {
 		$name = sanitize_text_field( $name );
 		if ( '' === $name ) {
-			return new WP_Error( 'missing_name', __( 'A name is required.', 'wp-user-teams' ) );
+			return new WP_Error( 'missing_name', __( 'A name is required.', 'user-teams' ) );
 		}
 
 		$slug = $slug ? sanitize_title( $slug ) : sanitize_title( $name );
@@ -144,7 +144,7 @@ trait Crud {
 	public static function update_team( $team_id, array $data ) {
 		$team_id = (int) $team_id;
 		if ( ! self::get_team( $team_id ) ) {
-			return new WP_Error( 'not_found', __( 'Team not found.', 'wp-user-teams' ) );
+			return new WP_Error( 'not_found', __( 'Team not found.', 'user-teams' ) );
 		}
 
 		/** This filter is documented in src/Traits/Crud.php */
@@ -153,7 +153,7 @@ trait Crud {
 		if ( isset( $data['name'] ) ) {
 			$name = sanitize_text_field( $data['name'] );
 			if ( '' === $name ) {
-				return new WP_Error( 'missing_name', __( 'A name is required.', 'wp-user-teams' ) );
+				return new WP_Error( 'missing_name', __( 'A name is required.', 'user-teams' ) );
 			}
 			wp_update_user( array(
 				'ID'           => $team_id,
@@ -169,7 +169,7 @@ trait Crud {
 			}
 			$existing = self::get_team_by_slug( $slug );
 			if ( $existing && (int) $existing['id'] !== $team_id ) {
-				return new WP_Error( 'duplicate_slug', __( 'That slug is already in use.', 'wp-user-teams' ) );
+				return new WP_Error( 'duplicate_slug', __( 'That slug is already in use.', 'user-teams' ) );
 			}
 			update_user_meta( $team_id, self::SLUG_META_KEY, $slug );
 		}

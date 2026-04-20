@@ -42,7 +42,7 @@ trait Hiding {
 		if ( $user instanceof WP_User && self::is_team_user( $user->ID ) ) {
 			return new WP_Error(
 				'team_user',
-				__( 'Team accounts cannot log in.', 'wp-user-teams' )
+				__( 'Team accounts cannot log in.', 'user-teams' )
 			);
 		}
 		return $user;
