@@ -133,25 +133,50 @@ class WP_User_Teams_Admin {
 		}
 		$ids_int   = array_map( 'intval', $team_ids );
 		$selectors = array_map( fn( $id ) => '#user-' . $id, $ids_int );
-		$sel       = implode( ',', $selectors );
-		echo "<style>\n";
-		echo "{$sel} { background:#f6f7f7; }\n";
-		echo "{$sel} td { border-top:3px solid #e5e5e5; }\n";
-		echo "{$sel} .column-username strong::before {\n";
-		echo "  content:'Team'; display:inline-block; font-size:10px; text-transform:uppercase;\n";
-		echo "  letter-spacing:0.04em; font-weight:600; color:#2271b1;\n";
-		echo "  background:#e7f1fb; border-radius:3px; padding:2px 6px; margin-right:6px;\n";
-		echo "  vertical-align:middle;\n";
-		echo "}\n";
-		// Hide the auto-generated `_team_*` login line in the username cell.
-		echo "{$sel} .column-username .row-actions + br + span,\n";
-		echo "{$sel} .column-username > br,\n";
-		echo "{$sel} .column-username > span:not(.wput-role) { display:none; }\n";
-		// Dim the placeholder email so it's visually out of the way but still
-		// accessible to anyone inspecting the row.
-		echo "{$sel} .column-email a { color:transparent; position:relative; }\n";
-		echo "{$sel} .column-email a::before { content:'—'; color:#646970; position:absolute; left:0; top:0; }\n";
-		echo "</style>\n";
+		$sel       = implode( ",\n", $selectors );
+		echo <<<CSS
+		<style>
+		{$sel} {
+			background: #f6f7f7;
+		}
+		{$sel} td {
+			border-top: 3px solid #e5e5e5;
+		}
+		{$sel} .column-username strong::before {
+			content: 'Team';
+			display: inline-block;
+			font-size: 10px;
+			text-transform: uppercase;
+			letter-spacing: 0.04em;
+			font-weight: 600;
+			color: #2271b1;
+			background: #e7f1fb;
+			border-radius: 3px;
+			padding: 2px 6px;
+			margin-right: 6px;
+			vertical-align: middle;
+		}
+		/* Hide the auto-generated `_team_*` login line in the username cell. */
+		{$sel} .column-username .row-actions + br + span,
+		{$sel} .column-username > br,
+		{$sel} .column-username > span:not(.wput-role) {
+			display: none;
+		}
+		/* Dim the placeholder email so it's visually out of the way but still accessible. */
+		{$sel} .column-email a {
+			color: transparent;
+			position: relative;
+		}
+		{$sel} .column-email a::before {
+			content: '—';
+			color: #646970;
+			position: absolute;
+			left: 0;
+			top: 0;
+		}
+		</style>
+		CSS;
+		echo "\n";
 
 		$ids_json = wp_json_encode( $ids_int );
 		?>
