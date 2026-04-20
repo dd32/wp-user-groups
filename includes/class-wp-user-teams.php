@@ -69,6 +69,13 @@ class WP_User_Teams {
 
 		add_filter( 'get_blogs_of_user', array( $this, 'filter_get_blogs_of_user' ), 10, 3 );
 		add_action( 'wp_delete_site', array( $this, 'on_site_deleted' ) );
+
+		// Fake `wp_{blog}_capabilities` meta for team members on blogs the
+		// team covers. An empty-array result satisfies the membership
+		// check used by `is_user_member_of_blog()` without granting any
+		// caps (fan-out happens via `user_has_cap`). Real caps meta, if
+		// present, is left untouched.
+		add_filter( 'get_user_metadata', array( $this, 'fake_member_blog_capabilities' ), 10, 4 );
 	}
 
 	/* ------------------------------------------------------------------
@@ -80,6 +87,7 @@ class WP_User_Teams {
 	 */
 	public static function get_all_teams() {
 		$team_users = get_users( array(
+			'blog_id'                 => 0, // network-wide: teams aren't bound to a single blog
 			'meta_key'                => self::IS_TEAM_META_KEY,
 			'meta_value'              => '1',
 			'number'                  => -1,
@@ -116,6 +124,7 @@ class WP_User_Teams {
 			return null;
 		}
 		$users = get_users( array(
+			'blog_id'                => 0,
 			'meta_query'             => array(
 				'relation' => 'AND',
 				array( 'key' => self::IS_TEAM_META_KEY, 'value' => '1' ),
@@ -170,6 +179,15 @@ class WP_User_Teams {
 		update_user_meta( $user_id, self::IS_TEAM_META_KEY, '1' );
 		update_user_meta( $user_id, self::SLUG_META_KEY, $slug );
 		update_user_meta( $user_id, self::GLOBAL_ROLE_META, $role );
+
+		// `wp_insert_user` with `role => ''` still writes an empty
+		// `wp_{current_blog}_capabilities` meta row on multisite (via
+		// `WP_User::set_role`), which would make the team account appear
+		// as a member of the creating blog. Strip it so the team starts
+		// with no blog attachments.
+		global $wpdb;
+		delete_user_meta( $user_id, $wpdb->get_blog_prefix() . 'capabilities' );
+		delete_user_meta( $user_id, $wpdb->get_blog_prefix() . 'user_level' );
 
 		return (int) $user_id;
 	}
@@ -247,7 +265,9 @@ class WP_User_Teams {
 	/** @return array<int,string> blog_id => role slug ('' = member without a specific role) */
 	public static function get_team_site_roles( $team_id ) {
 		$team_id = (int) $team_id;
-		if ( ! self::get_team( $team_id ) ) {
+		// Use the marker-meta check directly — calling `get_team()` here
+		// would recurse back through `user_to_team()` → `get_team_site_roles()`.
+		if ( $team_id <= 0 || ! self::is_team_user( $team_id ) ) {
 			return array();
 		}
 
@@ -534,6 +554,55 @@ class WP_User_Teams {
 
 	public static function is_team_user( $user_id ) {
 		return '1' === (string) get_user_meta( (int) $user_id, self::IS_TEAM_META_KEY, true );
+	}
+
+	/**
+	 * Makes `get_user_meta( $uid, 'wp_{blog}_capabilities', true )` return
+	 * an empty array for users whose team covers that blog, so
+	 * `is_user_member_of_blog()` recognises them. Real caps meta, if any,
+	 * is left untouched.
+	 *
+	 * @param mixed  $value    Value being filtered.
+	 * @param int    $user_id  Target user ID.
+	 * @param string $meta_key Meta key being read.
+	 * @param bool   $single   Whether a single value was requested.
+	 */
+	public function fake_member_blog_capabilities( $value, $user_id, $meta_key, $single ) {
+		if ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) {
+			return $value;
+		}
+		if ( null !== $value ) {
+			return $value; // Another filter already provided one.
+		}
+		if ( ! is_string( $meta_key ) || 0 === preg_match( '/^[a-z0-9_]*_(\d+)_capabilities$/', $meta_key, $m ) ) {
+			return $value;
+		}
+		$user_id = (int) $user_id;
+		if ( $user_id <= 0 || self::is_team_user( $user_id ) ) {
+			return $value;
+		}
+		$blog_id = (int) $m[1];
+		$covered = false;
+		foreach ( self::get_user_teams( $user_id ) as $team_id => $team ) {
+			if ( ! self::team_applies_to_site( $team_id, $blog_id ) ) {
+				continue;
+			}
+			// Only fake membership when the team actually grants a role
+			// here. Membership-only teams (no role, no effect) must stay
+			// non-members so `is_user_member_of_blog()` returns false.
+			if ( '' === self::resolve_role_for_site( $team, $blog_id ) ) {
+				continue;
+			}
+			$covered = true;
+			break;
+		}
+		if ( ! $covered ) {
+			return $value;
+		}
+		// Return the raw meta shape WP expects: a single-entry array
+		// whose element is the caps array. For `get_user_meta(..., true)`,
+		// core unwraps to element 0.
+		return array( array() );
 	}
 
 	/* ------------------------------------------------------------------

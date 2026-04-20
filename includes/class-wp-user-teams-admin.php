@@ -131,7 +131,8 @@ class WP_User_Teams_Admin {
 		if ( empty( $team_ids ) ) {
 			return;
 		}
-		$selectors = array_map( fn( $id ) => '#user-' . (int) $id, $team_ids );
+		$ids_int   = array_map( 'intval', $team_ids );
+		$selectors = array_map( fn( $id ) => '#user-' . $id, $ids_int );
 		$sel       = implode( ',', $selectors );
 		echo "<style>\n";
 		echo "{$sel} { background:#f6f7f7; }\n";
@@ -142,7 +143,52 @@ class WP_User_Teams_Admin {
 		echo "  background:#e7f1fb; border-radius:3px; padding:2px 6px; margin-right:6px;\n";
 		echo "  vertical-align:middle;\n";
 		echo "}\n";
+		// Hide the auto-generated `_team_*` login line in the username cell.
+		echo "{$sel} .column-username .row-actions + br + span,\n";
+		echo "{$sel} .column-username > br,\n";
+		echo "{$sel} .column-username > span:not(.wput-role) { display:none; }\n";
+		// Dim the placeholder email so it's visually out of the way but still
+		// accessible to anyone inspecting the row.
+		echo "{$sel} .column-email a { color:transparent; position:relative; }\n";
+		echo "{$sel} .column-email a::before { content:'—'; color:#646970; position:absolute; left:0; top:0; }\n";
 		echo "</style>\n";
+
+		$ids_json = wp_json_encode( $ids_int );
+		?>
+		<script>
+		( function () {
+			var ids = <?php echo $ids_json; ?>;
+			document.addEventListener( 'DOMContentLoaded', function () {
+				ids.forEach( function ( id ) {
+					var row = document.getElementById( 'user-' + id );
+					if ( ! row ) { return; }
+
+					// Strip the `_team_*` login text from the username cell.
+					// The markup is `<strong><a>Display</a></strong><br />login`.
+					var username = row.querySelector( '.column-username' );
+					if ( username ) {
+						var walker = document.createTreeWalker( username, NodeFilter.SHOW_TEXT );
+						var victims = [];
+						while ( walker.nextNode() ) {
+							var t = walker.currentNode.nodeValue;
+							if ( t && /^\s*_team_/.test( t ) ) { victims.push( walker.currentNode ); }
+						}
+						victims.forEach( function ( n ) { n.parentNode.removeChild( n ); } );
+					}
+
+					// Replace the `@teams.internal` mailto with a plain dash.
+					var email = row.querySelector( '.column-email' );
+					if ( email ) {
+						var link = email.querySelector( 'a[href^="mailto:"]' );
+						if ( link && /@teams\.internal\b/i.test( link.textContent ) ) {
+							email.textContent = '\u2014';
+						}
+					}
+				} );
+			} );
+		} )();
+		</script>
+		<?php
 	}
 
 	/* ------------------------------------------------------------------
@@ -906,8 +952,29 @@ class WP_User_Teams_Admin {
 		}
 
 		$blog_id    = (int) get_current_blog_id();
-		$native     = array_map( 'strval', (array) $user->roles );
 		$role_names = wp_roles()->get_names();
+
+		// For team-user rows on the Users list, show the role the team
+		// grants on this site. A per-site role is already reflected in
+		// the team's capabilities meta (native `$user->roles`); a
+		// team with only a Global Role would otherwise appear roleless,
+		// so resolve it from `$team['role']` here.
+		if ( WP_User_Teams::is_team_user( $user->ID ) ) {
+			if ( ! empty( $user->roles ) ) {
+				return $role_list;
+			}
+			$team = WP_User_Teams::get_team( $user->ID );
+			if ( ! $team || empty( $team['role'] ) || ! isset( $role_names[ $team['role'] ] ) ) {
+				return $role_list;
+			}
+			$label = translate_user_role( $role_names[ $team['role'] ] );
+			if ( is_array( $role_list ) ) {
+				return array_merge( (array) $role_list, array( $label ) );
+			}
+			return '' !== (string) $role_list ? $role_list . ', ' . $label : $label;
+		}
+
+		$native     = array_map( 'strval', (array) $user->roles );
 
 		$team_entries = array();
 		foreach ( WP_User_Teams::get_user_teams( $user->ID ) as $team_id => $team ) {
@@ -1005,11 +1072,26 @@ class WP_User_Teams_Admin {
 	 * @param WP_User_Query $query
 	 */
 	public function include_team_members_in_user_query( $query ) {
+		// Reentrancy guard: this callback runs `get_all_teams()` internally,
+		// which issues its own `WP_User_Query`. Without the guard we'd
+		// recurse back into ourselves.
+		static $running = false;
+		if ( $running ) {
+			return;
+		}
 		$blog_id = (int) $query->get( 'blog_id' );
 		if ( $blog_id <= 0 ) {
 			return;
 		}
+		$running = true;
+		try {
+			$this->apply_team_member_injection( $query, $blog_id );
+		} finally {
+			$running = false;
+		}
+	}
 
+	private function apply_team_member_injection( $query, $blog_id ) {
 		$team_filter = (int) ( $_GET['team'] ?? 0 );
 		$role_filter = (string) $query->get( 'role' );
 		$search      = (string) $query->get( 'search' );
