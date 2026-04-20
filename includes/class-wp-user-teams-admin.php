@@ -98,26 +98,29 @@ class WP_User_Teams_Admin {
 		if ( ! $user instanceof WP_User || ! WP_User_Teams::is_team_user( $user->ID ) ) {
 			return $actions;
 		}
-		$new = array();
-		if ( current_user_can( self::required_cap() ) ) {
-			$edit_url = $this->page_url( array( 'action' => 'edit', 'team_id' => (int) $user->ID ) );
-			$new['wput-edit-team'] = '<a href="' . esc_url( $edit_url ) . '">' . esc_html__( 'Edit team', 'wp-user-teams' ) . '</a>';
+		// Teams are a network-wide concept managed from Network Admin →
+		// Users → Teams. Only super admins see actions on team rows;
+		// regular site admins get an empty action list (they still see
+		// the row, just not the links).
+		if ( ! current_user_can( self::required_cap() ) ) {
+			return array();
 		}
-		if ( current_user_can( 'promote_users' ) ) {
-			$remove_url = wp_nonce_url(
-				add_query_arg(
-					array(
-						'action'  => 'wp_user_teams_remove_site',
-						'team_id' => (int) $user->ID,
-						'blog_id' => (int) get_current_blog_id(),
-					),
-					admin_url( 'admin-post.php' )
+		$edit_url   = $this->page_url( array( 'action' => 'edit', 'team_id' => (int) $user->ID ) );
+		$remove_url = wp_nonce_url(
+			add_query_arg(
+				array(
+					'action'  => 'wp_user_teams_remove_site',
+					'team_id' => (int) $user->ID,
+					'blog_id' => (int) get_current_blog_id(),
 				),
-				self::NONCE_ACTION
-			);
-			$new['wput-remove-from-site'] = '<a href="' . esc_url( $remove_url ) . '" class="submitdelete" onclick="return confirm(\'' . esc_js( __( 'Remove this team from the site? Members lose the team-granted role here.', 'wp-user-teams' ) ) . '\');">' . esc_html__( 'Remove from site', 'wp-user-teams' ) . '</a>';
-		}
-		return $new;
+				admin_url( 'admin-post.php' )
+			),
+			self::NONCE_ACTION
+		);
+		return array(
+			'wput-edit-team'        => '<a href="' . esc_url( $edit_url ) . '">' . esc_html__( 'Edit team', 'wp-user-teams' ) . '</a>',
+			'wput-remove-from-site' => '<a href="' . esc_url( $remove_url ) . '" class="submitdelete" onclick="return confirm(\'' . esc_js( __( 'Remove this team from the site? Members lose the team-granted role here.', 'wp-user-teams' ) ) . '\');">' . esc_html__( 'Remove from site', 'wp-user-teams' ) . '</a>',
+		);
 	}
 
 	public function print_team_row_styles() {
@@ -876,44 +879,38 @@ class WP_User_Teams_Admin {
 	/**
 	 * Remove a site's role grant from a team.
 	 *
-	 * Two entry paths: the network Teams edit page (super admin), and
-	 * the per-site users.php "Remove from site" row action (site admin
-	 * with `promote_users`). Auth and redirect target differ by path.
+	 * Super-admin only — teams are a network-wide concept. The per-site
+	 * row action is also only shown to super admins.
 	 */
 	public function handle_remove_site() {
 		check_admin_referer( self::NONCE_ACTION );
 
-		$team_id = (int) ( $_GET['team_id'] ?? 0 );
-		$blog_id = (int) ( $_GET['blog_id'] ?? 0 );
-
-		if ( ! current_user_can_for_blog( $blog_id ?: get_current_blog_id(), 'promote_users' ) ) {
-			wp_die( esc_html__( 'You do not have permission to manage users on this site.', 'wp-user-teams' ) );
+		if ( ! $this->current_user_can_manage() ) {
+			wp_die( esc_html__( 'You do not have permission to manage teams.', 'wp-user-teams' ) );
 		}
 
-		$team = WP_User_Teams::get_team( $team_id );
-		if ( ! $team || $blog_id <= 0 ) {
-			$this->redirect_after_remove_site( 'save-failed' );
-			return;
+		$team_id  = (int) ( $_GET['team_id'] ?? 0 );
+		$blog_id  = (int) ( $_GET['blog_id'] ?? 0 );
+		$from_net = is_network_admin();
+
+		$team   = WP_User_Teams::get_team( $team_id );
+		$notice = 'save-failed';
+		if ( $team && $blog_id > 0 ) {
+			$site_roles = $team['sites'];
+			unset( $site_roles[ $blog_id ] );
+			WP_User_Teams::set_team_sites( $team_id, $site_roles );
+			$notice = 'saved';
 		}
 
-		$site_roles = $team['sites'];
-		unset( $site_roles[ $blog_id ] );
-		WP_User_Teams::set_team_sites( $team_id, $site_roles );
-
-		$this->redirect_after_remove_site( 'saved', $team_id );
-	}
-
-	/**
-	 * Network-admin callers go back to the team edit page; per-site
-	 * callers (who may not have access to the Teams admin) go back to
-	 * users.php with a dismissible notice.
-	 */
-	private function redirect_after_remove_site( $notice, $team_id = 0 ) {
-		if ( is_network_admin() && current_user_can( self::required_cap() ) ) {
-			wp_safe_redirect( $this->page_url( array( 'action' => 'edit', 'team_id' => (int) $team_id, 'notice' => $notice ) ) );
-			exit;
+		if ( $from_net ) {
+			wp_safe_redirect( $this->page_url( array( 'action' => 'edit', 'team_id' => $team_id, 'notice' => $notice ) ) );
+		} else {
+			wp_safe_redirect( add_query_arg(
+				'wput_notice',
+				'saved' === $notice ? 'site-removed' : 'site-remove-failed',
+				admin_url( 'users.php' )
+			) );
 		}
-		wp_safe_redirect( add_query_arg( 'wput_notice', 'saved' === $notice ? 'site-removed' : 'site-remove-failed', admin_url( 'users.php' ) ) );
 		exit;
 	}
 
