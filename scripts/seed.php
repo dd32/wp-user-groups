@@ -1,4 +1,6 @@
 <?php
+use dd32\WordPress\UserTeams\Plugin;
+use dd32\WordPress\UserTeams\Admin;
 /**
  * Development seed data for the local wp-env test site.
  *
@@ -12,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit( 1 );
 }
 
-if ( ! class_exists( 'WP_User_Teams' ) ) {
+if ( ! class_exists( 'Plugin' ) ) {
 	WP_CLI::error( 'User Teams plugin is not loaded.' );
 }
 
@@ -109,13 +111,13 @@ $team_defs = array(
 
 $team_ids = array();
 foreach ( $team_defs as $slug => $def ) {
-	$existing = WP_User_Teams::get_team_by_slug( $slug );
+	$existing = Plugin::get_team_by_slug( $slug );
 	if ( $existing ) {
 		$tid = $existing['id'];
-		WP_User_Teams::update_team( $tid, array( 'name' => $def['name'], 'role' => $def['role'] ) );
+		Plugin::update_team( $tid, array( 'name' => $def['name'], 'role' => $def['role'] ) );
 		WP_CLI::log( "  team exists: {$slug} (id {$tid})" );
 	} else {
-		$tid = WP_User_Teams::create_team( $def['name'], $slug, $def['role'] );
+		$tid = Plugin::create_team( $def['name'], $slug, $def['role'] );
 		if ( is_wp_error( $tid ) ) {
 			WP_CLI::warning( "  skip team {$slug}: " . $tid->get_error_message() );
 			continue;
@@ -131,7 +133,7 @@ foreach ( $team_defs as $slug => $def ) {
 				$blog_ids[] = $sites[ $site_slug ];
 			}
 		}
-		WP_User_Teams::set_team_sites( $tid, $blog_ids );
+		Plugin::set_team_sites( $tid, $blog_ids );
 	}
 }
 
@@ -156,7 +158,7 @@ foreach ( $memberships as $login => $team_slugs ) {
 			$ids[] = $team_ids[ $slug ];
 		}
 	}
-	WP_User_Teams::set_user_teams( $user_ids[ $login ], $ids );
+	Plugin::set_user_teams( $user_ids[ $login ], $ids );
 	WP_CLI::log( "  {$login} -> [" . implode( ', ', $team_slugs ) . ']' );
 }
 

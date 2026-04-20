@@ -2,14 +2,19 @@
 /**
  * Admin UI for User Teams.
  *
- * - Teams management page (Users → Teams on single site; Network Admin → Users → Teams on multisite).
+ * - Teams management page under Network Admin → Users → Teams.
  * - User-edit profile section with team membership checkboxes.
  * - "Teams" column on the Users list table.
  */
 
+namespace dd32\WordPress\UserTeams;
+
+use WP_Error;
+use WP_User;
+
 defined( 'ABSPATH' ) || exit;
 
-class WP_User_Teams_Admin {
+class Admin {
 
 	const PAGE_SLUG    = 'user-teams';
 	const NONCE_ACTION = 'wp_user_teams';
@@ -68,7 +73,7 @@ class WP_User_Teams_Admin {
 		add_action( 'pre_user_query', array( $this, 'include_team_members_in_user_query' ) );
 
 		// On Users list screens, opt team accounts back into the user
-		// query (they're globally excluded by WP_User_Teams). Team
+		// query (they're globally excluded by Plugin). Team
 		// accounts have native capabilities meta for the sites they
 		// cover, so WP_Users_List_Table renders them as real rows.
 		add_action( 'pre_get_users', array( $this, 'include_team_users_on_users_screens' ), 5 );
@@ -90,11 +95,11 @@ class WP_User_Teams_Admin {
 		if ( 'users' !== $screen->base && 'users-network' !== $screen->base ) {
 			return;
 		}
-		$query->set( WP_User_Teams::QUERY_INCLUDE_FLAG, true );
+		$query->set( Plugin::QUERY_INCLUDE_FLAG, true );
 	}
 
 	public function filter_user_row_actions( $actions, $user ) {
-		if ( ! $user instanceof WP_User || ! WP_User_Teams::is_team_user( $user->ID ) ) {
+		if ( ! $user instanceof WP_User || ! Plugin::is_team_user( $user->ID ) ) {
 			return $actions;
 		}
 		// Teams are a network-wide concept managed from Network Admin →
@@ -128,7 +133,7 @@ class WP_User_Teams_Admin {
 			return;
 		}
 		$team_names = array();
-		foreach ( WP_User_Teams::get_all_teams() as $team_id => $team ) {
+		foreach ( Plugin::get_all_teams() as $team_id => $team ) {
 			$team_names[ (int) $team_id ] = $team['name'];
 		}
 		if ( empty( $team_names ) ) {
@@ -254,11 +259,11 @@ class WP_User_Teams_Admin {
 		$blog_id = (int) get_current_blog_id();
 
 		$out = array();
-		foreach ( WP_User_Teams::get_all_teams() as $team_id => $team ) {
-			if ( ! $network && ! WP_User_Teams::team_applies_to_site( $team_id, $blog_id ) ) {
+		foreach ( Plugin::get_all_teams() as $team_id => $team ) {
+			if ( ! $network && ! Plugin::team_applies_to_site( $team_id, $blog_id ) ) {
 				continue;
 			}
-			foreach ( WP_User_Teams::get_team_members( $team_id ) as $uid ) {
+			foreach ( Plugin::get_team_members( $team_id ) as $uid ) {
 				$out[ (int) $uid ][] = $team['name'];
 			}
 		}
@@ -319,8 +324,8 @@ class WP_User_Teams_Admin {
 	 * ---------------------------------------------------------------- */
 
 	private function render_list() {
-		$teams   = WP_User_Teams::get_all_teams();
-		$counts  = WP_User_Teams::count_members_per_team();
+		$teams   = Plugin::get_all_teams();
+		$counts  = Plugin::count_members_per_team();
 		$new_url = $this->page_url( array( 'action' => 'new' ) );
 		?>
 		<div class="wrap">
@@ -362,7 +367,7 @@ class WP_User_Teams_Admin {
 						),
 						self::NONCE_ACTION
 					);
-					$sites        = WP_User_Teams::get_team_sites( $team['id'] );
+					$sites        = Plugin::get_team_sites( $team['id'] );
 					$member_count = $counts[ $team['id'] ] ?? 0;
 				?>
 					<tr>
@@ -428,7 +433,7 @@ class WP_User_Teams_Admin {
 		$team    = null;
 
 		if ( 'edit' === $action ) {
-			$team = WP_User_Teams::get_team( $team_id );
+			$team = Plugin::get_team( $team_id );
 			if ( ! $team ) {
 				wp_die( esc_html__( 'Team not found.', 'wp-user-teams' ) );
 			}
@@ -514,7 +519,7 @@ class WP_User_Teams_Admin {
 	 * Kept outside the main edit form because HTML forms cannot nest.
 	 */
 	private function render_team_sites_section( array $team ) {
-		$site_roles = WP_User_Teams::get_team_site_roles( $team['id'] );
+		$site_roles = Plugin::get_team_site_roles( $team['id'] );
 		$role_names = wp_roles()->get_names();
 		$all_sites  = get_sites( array( 'number' => 0 ) );
 
@@ -647,7 +652,7 @@ class WP_User_Teams_Admin {
 		$team_id = (int) ( $_POST['team_id'] ?? 0 );
 
 		if ( $team_id ) {
-			$result = WP_User_Teams::update_team(
+			$result = Plugin::update_team(
 				$team_id,
 				array(
 					'name' => $name,
@@ -656,7 +661,7 @@ class WP_User_Teams_Admin {
 				)
 			);
 		} else {
-			$result  = WP_User_Teams::create_team( $name, $slug, $role );
+			$result  = Plugin::create_team( $name, $slug, $role );
 			$team_id = is_wp_error( $result ) ? 0 : (int) $result;
 		}
 
@@ -677,7 +682,7 @@ class WP_User_Teams_Admin {
 		}
 
 		$team_id = (int) ( $_GET['team_id'] ?? 0 );
-		if ( ! $team_id || ! WP_User_Teams::delete_team( $team_id ) ) {
+		if ( ! $team_id || ! Plugin::delete_team( $team_id ) ) {
 			$this->redirect_with_notice( 'delete-failed' );
 			return;
 		}
@@ -694,8 +699,8 @@ class WP_User_Teams_Admin {
 			return;
 		}
 
-		$teams         = WP_User_Teams::get_all_teams();
-		$user_team_ids = WP_User_Teams::get_user_team_ids( $user->ID );
+		$teams         = Plugin::get_all_teams();
+		$user_team_ids = Plugin::get_user_team_ids( $user->ID );
 		$role_names    = wp_roles()->get_names();
 		?>
 		<h2><?php esc_html_e( 'User Teams', 'wp-user-teams' ); ?></h2>
@@ -821,7 +826,7 @@ class WP_User_Teams_Admin {
 	 * here in one click instead of inviting users individually.
 	 */
 	private function render_add_team_to_site_section() {
-		$teams   = WP_User_Teams::get_all_teams();
+		$teams   = Plugin::get_all_teams();
 		$blog_id = (int) get_current_blog_id();
 
 		$available = array();
@@ -917,7 +922,7 @@ class WP_User_Teams_Admin {
 		$blog_id = (int) ( $_POST['blog_id'] ?? 0 );
 		$role    = sanitize_key( wp_unslash( $_POST['role'] ?? '' ) );
 
-		$team = WP_User_Teams::get_team( $team_id );
+		$team = Plugin::get_team( $team_id );
 		if ( ! $team || $blog_id <= 0 ) {
 			$this->redirect_with_notice( 'save-failed', __( 'Invalid site or team.', 'wp-user-teams' ) );
 			return;
@@ -928,7 +933,7 @@ class WP_User_Teams_Admin {
 
 		$site_roles             = $team['sites'];
 		$site_roles[ $blog_id ] = $role;
-		WP_User_Teams::set_team_sites( $team_id, $site_roles );
+		Plugin::set_team_sites( $team_id, $site_roles );
 
 		wp_safe_redirect( $this->page_url( array( 'action' => 'edit', 'team_id' => $team_id, 'notice' => 'saved' ) ) );
 		exit;
@@ -951,12 +956,12 @@ class WP_User_Teams_Admin {
 		$blog_id  = (int) ( $_GET['blog_id'] ?? 0 );
 		$from_net = is_network_admin();
 
-		$team   = WP_User_Teams::get_team( $team_id );
+		$team   = Plugin::get_team( $team_id );
 		$notice = 'save-failed';
 		if ( $team && $blog_id > 0 ) {
 			$site_roles = $team['sites'];
 			unset( $site_roles[ $blog_id ] );
-			WP_User_Teams::set_team_sites( $team_id, $site_roles );
+			Plugin::set_team_sites( $team_id, $site_roles );
 			$notice = 'saved';
 		}
 
@@ -985,7 +990,7 @@ class WP_User_Teams_Admin {
 			wp_die( esc_html__( 'You do not have permission to manage users on this site.', 'wp-user-teams' ) );
 		}
 
-		$team = WP_User_Teams::get_team( $team_id );
+		$team = Plugin::get_team( $team_id );
 		if ( ! $team || ! $blog_id ) {
 			$this->redirect_to_user_new( 'attach-failed' );
 			return;
@@ -997,7 +1002,7 @@ class WP_User_Teams_Admin {
 
 		$site_roles             = $team['sites'];
 		$site_roles[ $blog_id ] = $role; // Empty role = inherit Global Role here.
-		WP_User_Teams::set_team_sites( $team_id, $site_roles );
+		Plugin::set_team_sites( $team_id, $site_roles );
 
 		$this->redirect_to_user_new( 'attach-saved', $team['name'] );
 	}
@@ -1025,7 +1030,7 @@ class WP_User_Teams_Admin {
 			? array_map( 'intval', wp_unslash( $_POST['wput_teams'] ) )
 			: array();
 
-		WP_User_Teams::set_user_teams( $user_id, $submitted );
+		Plugin::set_user_teams( $user_id, $submitted );
 	}
 
 	/* ------------------------------------------------------------------
@@ -1041,7 +1046,7 @@ class WP_User_Teams_Admin {
 		if ( 'user_teams' !== $column ) {
 			return $output;
 		}
-		$teams = WP_User_Teams::get_user_teams( $user_id );
+		$teams = Plugin::get_user_teams( $user_id );
 		if ( empty( $teams ) ) {
 			return '&mdash;';
 		}
@@ -1071,11 +1076,11 @@ class WP_User_Teams_Admin {
 		// resolve it from `$team['role']` here. If there's no role to
 		// show, swap WP's "None" for an em-dash so the column reads as
 		// "no grant here" instead of "no role at all".
-		if ( WP_User_Teams::is_team_user( $user->ID ) ) {
+		if ( Plugin::is_team_user( $user->ID ) ) {
 			if ( ! empty( $user->roles ) ) {
 				return $role_list;
 			}
-			$team  = WP_User_Teams::get_team( $user->ID );
+			$team  = Plugin::get_team( $user->ID );
 			$label = ( $team && ! empty( $team['role'] ) && isset( $role_names[ $team['role'] ] ) )
 				? translate_user_role( $role_names[ $team['role'] ] )
 				: '';
@@ -1092,11 +1097,11 @@ class WP_User_Teams_Admin {
 		$native     = array_map( 'strval', (array) $user->roles );
 
 		$team_entries = array();
-		foreach ( WP_User_Teams::get_user_teams( $user->ID ) as $team_id => $team ) {
-			if ( ! WP_User_Teams::team_applies_to_site( $team_id, $blog_id ) ) {
+		foreach ( Plugin::get_user_teams( $user->ID ) as $team_id => $team ) {
+			if ( ! Plugin::team_applies_to_site( $team_id, $blog_id ) ) {
 				continue;
 			}
-			$role_slug = WP_User_Teams::resolve_role_for_site( $team, $blog_id );
+			$role_slug = Plugin::resolve_role_for_site( $team, $blog_id );
 			if ( '' === $role_slug || in_array( $role_slug, $native, true ) ) {
 				continue;
 			}
@@ -1135,7 +1140,7 @@ class WP_User_Teams_Admin {
 	 * Works on both single-site users.php and multisite network/users.php.
 	 */
 	public function filter_user_views( $views ) {
-		$teams = WP_User_Teams::get_all_teams();
+		$teams = Plugin::get_all_teams();
 		if ( empty( $teams ) ) {
 			return $views;
 		}
@@ -1150,7 +1155,7 @@ class WP_User_Teams_Admin {
 			$views = $this->inject_team_derived_role_views( $views, $blog_id );
 		}
 
-		$counts   = WP_User_Teams::count_members_per_team();
+		$counts   = Plugin::count_members_per_team();
 		$current  = (int) ( $_GET['team'] ?? 0 );
 		// Clear other view-scope args when switching to a team view so the
 		// URL stays canonical (e.g. ?role=administrator → ?team=4).
@@ -1161,7 +1166,7 @@ class WP_User_Teams_Admin {
 			if ( 0 === $count ) {
 				continue; // Empty team — nothing to filter to.
 			}
-			if ( $is_site_list && ! WP_User_Teams::team_applies_to_site( $team['id'], $blog_id ) ) {
+			if ( $is_site_list && ! Plugin::team_applies_to_site( $team['id'], $blog_id ) ) {
 				continue; // Team doesn't cover this site.
 			}
 
@@ -1222,10 +1227,10 @@ class WP_User_Teams_Admin {
 		}
 
 		if ( $team_filter > 0 ) {
-			if ( ! WP_User_Teams::team_applies_to_site( $team_filter, $blog_id ) ) {
+			if ( ! Plugin::team_applies_to_site( $team_filter, $blog_id ) ) {
 				return;
 			}
-			$extra_ids = WP_User_Teams::get_team_members( $team_filter );
+			$extra_ids = Plugin::get_team_members( $team_filter );
 		} elseif ( '' !== $role_filter ) {
 			// `?role=X`: include team members whose team-derived role on
 			// this site equals X, so they surface under the matching
@@ -1278,14 +1283,14 @@ class WP_User_Teams_Admin {
 
 	private function collect_applicable_team_member_ids( $blog_id ) {
 		$ids = array();
-		foreach ( WP_User_Teams::get_all_teams() as $team_id => $team ) {
-			if ( ! WP_User_Teams::team_applies_to_site( $team_id, $blog_id ) ) {
+		foreach ( Plugin::get_all_teams() as $team_id => $team ) {
+			if ( ! Plugin::team_applies_to_site( $team_id, $blog_id ) ) {
 				continue;
 			}
-			if ( '' === WP_User_Teams::resolve_role_for_site( $team, $blog_id ) ) {
+			if ( '' === Plugin::resolve_role_for_site( $team, $blog_id ) ) {
 				continue;
 			}
-			foreach ( WP_User_Teams::get_team_members( $team_id ) as $uid ) {
+			foreach ( Plugin::get_team_members( $team_id ) as $uid ) {
 				$ids[ (int) $uid ] = true;
 			}
 		}
@@ -1303,15 +1308,15 @@ class WP_User_Teams_Admin {
 	 */
 	private function inject_team_derived_role_views( $views, $blog_id ) {
 		$counts_by_role = array();
-		foreach ( WP_User_Teams::get_all_teams() as $team_id => $team ) {
-			if ( ! WP_User_Teams::team_applies_to_site( $team_id, $blog_id ) ) {
+		foreach ( Plugin::get_all_teams() as $team_id => $team ) {
+			if ( ! Plugin::team_applies_to_site( $team_id, $blog_id ) ) {
 				continue;
 			}
-			$role_slug = WP_User_Teams::resolve_role_for_site( $team, $blog_id );
+			$role_slug = Plugin::resolve_role_for_site( $team, $blog_id );
 			if ( '' === $role_slug ) {
 				continue;
 			}
-			foreach ( WP_User_Teams::get_team_members( $team_id ) as $uid ) {
+			foreach ( Plugin::get_team_members( $team_id ) as $uid ) {
 				$counts_by_role[ $role_slug ][ (int) $uid ] = true;
 			}
 		}
@@ -1380,14 +1385,14 @@ class WP_User_Teams_Admin {
 	 */
 	private function collect_team_member_ids_with_role( $blog_id, $role_slug ) {
 		$ids = array();
-		foreach ( WP_User_Teams::get_all_teams() as $team_id => $team ) {
-			if ( ! WP_User_Teams::team_applies_to_site( $team_id, $blog_id ) ) {
+		foreach ( Plugin::get_all_teams() as $team_id => $team ) {
+			if ( ! Plugin::team_applies_to_site( $team_id, $blog_id ) ) {
 				continue;
 			}
-			if ( WP_User_Teams::resolve_role_for_site( $team, $blog_id ) !== $role_slug ) {
+			if ( Plugin::resolve_role_for_site( $team, $blog_id ) !== $role_slug ) {
 				continue;
 			}
-			foreach ( WP_User_Teams::get_team_members( $team_id ) as $uid ) {
+			foreach ( Plugin::get_team_members( $team_id ) as $uid ) {
 				$ids[ (int) $uid ] = true;
 			}
 		}
@@ -1410,7 +1415,7 @@ class WP_User_Teams_Admin {
 		}
 
 		$blog_id = (int) get_current_blog_id();
-		$teams   = WP_User_Teams::get_all_teams();
+		$teams   = Plugin::get_all_teams();
 		if ( empty( $teams ) ) {
 			return;
 		}
@@ -1418,17 +1423,17 @@ class WP_User_Teams_Admin {
 		$role_names = wp_roles()->get_names();
 		$covering   = array();
 		foreach ( $teams as $team_id => $team ) {
-			if ( ! WP_User_Teams::team_applies_to_site( $team_id, $blog_id ) ) {
+			if ( ! Plugin::team_applies_to_site( $team_id, $blog_id ) ) {
 				continue;
 			}
-			$role_slug = WP_User_Teams::resolve_role_for_site( $team, $blog_id );
+			$role_slug = Plugin::resolve_role_for_site( $team, $blog_id );
 			if ( '' === $role_slug ) {
 				continue;
 			}
 			$covering[] = array(
 				'team'    => $team,
 				'role'    => $role_slug,
-				'members' => WP_User_Teams::get_team_members( $team_id ),
+				'members' => Plugin::get_team_members( $team_id ),
 			);
 		}
 
@@ -1438,7 +1443,7 @@ class WP_User_Teams_Admin {
 
 		$can_manage     = is_super_admin();
 		$teams_page_url = $can_manage
-			? add_query_arg( 'page', WP_User_Teams_Admin::PAGE_SLUG, network_admin_url( 'users.php' ) )
+			? add_query_arg( 'page', self::PAGE_SLUG, network_admin_url( 'users.php' ) )
 			: '';
 		$avatar_limit   = 6;
 		?>
@@ -1579,7 +1584,7 @@ class WP_User_Teams_Admin {
 
 		$existing = (array) $query->get( 'meta_query' );
 		$existing[] = array(
-			'key'     => WP_User_Teams::USER_META_KEY,
+			'key'     => Plugin::USER_META_KEY,
 			'value'   => sprintf( 'i:%d;', $team_id ),
 			'compare' => 'LIKE',
 		);

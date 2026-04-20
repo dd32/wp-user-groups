@@ -24,8 +24,21 @@ define( 'WP_USER_TEAMS_PATH', plugin_dir_path( __FILE__ ) );
 // available to activate on multisite — WordPress hides the Activate
 // link on single-site installs. That's the contract for the plugin;
 // no further is_multisite() guards are needed below this line.
-require_once WP_USER_TEAMS_PATH . 'includes/class-wp-user-teams.php';
-require_once WP_USER_TEAMS_PATH . 'includes/class-wp-user-teams-admin.php';
 
-WP_User_Teams::instance();
-WP_User_Teams_Admin::instance();
+// PSR-4 autoloader for `dd32\WordPress\UserTeams\…` → `src/…`. Keeps
+// the plugin self-contained so it doesn't require a `composer install`
+// in the deploy path.
+spl_autoload_register( function ( $class ) {
+	$prefix = 'dd32\\WordPress\\UserTeams\\';
+	if ( 0 !== strncmp( $class, $prefix, strlen( $prefix ) ) ) {
+		return;
+	}
+	$relative = substr( $class, strlen( $prefix ) );
+	$path     = WP_USER_TEAMS_PATH . 'src/' . str_replace( '\\', '/', $relative ) . '.php';
+	if ( file_exists( $path ) ) {
+		require $path;
+	}
+} );
+
+dd32\WordPress\UserTeams\Plugin::instance();
+dd32\WordPress\UserTeams\Admin::instance();

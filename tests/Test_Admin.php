@@ -1,22 +1,24 @@
 <?php
+use dd32\WordPress\UserTeams\Plugin;
+use dd32\WordPress\UserTeams\Admin;
 /**
- * Integration tests for WP_User_Teams_Admin form handlers.
+ * Integration tests for Admin form handlers.
  *
  * Exercises handle_save / handle_delete / save_user_field by populating
  * $_POST and $_GET the way WordPress would on a real form submission.
  */
 class Test_Admin extends WP_UnitTestCase {
 
-	/** @var WP_User_Teams_Admin */
+	/** @var Admin */
 	private $admin;
 
 	private $admin_user_id;
 
 	public function set_up() {
 		parent::set_up();
-		WP_User_Teams::flush_all_caches();
+		Plugin::flush_all_caches();
 
-		$this->admin = WP_User_Teams_Admin::instance();
+		$this->admin = Admin::instance();
 
 		$this->admin_user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		grant_super_admin( $this->admin_user_id );
@@ -40,7 +42,7 @@ class Test_Admin extends WP_UnitTestCase {
 
 	public function test_handle_save_creates_team() {
 		$this->post_form( array(
-			'_wpnonce' => wp_create_nonce( WP_User_Teams_Admin::NONCE_ACTION ),
+			'_wpnonce' => wp_create_nonce( Admin::NONCE_ACTION ),
 			'name'     => 'Docs Team',
 			'slug'     => 'docs',
 			'role'     => 'editor',
@@ -48,7 +50,7 @@ class Test_Admin extends WP_UnitTestCase {
 
 		$this->run_handler_expecting_redirect( array( $this->admin, 'handle_save' ) );
 
-		$team = WP_User_Teams::get_team_by_slug( 'docs' );
+		$team = Plugin::get_team_by_slug( 'docs' );
 		$this->assertNotNull( $team );
 		$this->assertSame( 'Docs Team', $team['name'] );
 		$this->assertSame( 'editor', $team['role'] );
@@ -61,16 +63,16 @@ class Test_Admin extends WP_UnitTestCase {
 			$this->admin->handle_save();
 		} );
 
-		$this->assertNull( WP_User_Teams::get_team_by_slug( 'nope' ) );
+		$this->assertNull( Plugin::get_team_by_slug( 'nope' ) );
 	}
 
 	public function test_handle_add_site_adds_grant() {
 
-		$team_id = WP_User_Teams::create_team( 'AddSite', 'addsite', '' );
+		$team_id = Plugin::create_team( 'AddSite', 'addsite', '' );
 		$blog2   = self::factory()->blog->create();
 
 		$this->post_form( array(
-			'_wpnonce' => wp_create_nonce( WP_User_Teams_Admin::NONCE_ACTION ),
+			'_wpnonce' => wp_create_nonce( Admin::NONCE_ACTION ),
 			'team_id'  => (string) $team_id,
 			'blog_id'  => (string) $blog2,
 			'role'     => 'author',
@@ -78,16 +80,16 @@ class Test_Admin extends WP_UnitTestCase {
 
 		$this->run_handler_expecting_redirect( array( $this->admin, 'handle_add_site' ) );
 
-		$this->assertSame( array( $blog2 => 'author' ), WP_User_Teams::get_team_site_roles( $team_id ) );
+		$this->assertSame( array( $blog2 => 'author' ), Plugin::get_team_site_roles( $team_id ) );
 	}
 
 	public function test_handle_add_site_with_empty_role_stores_inherit() {
 
-		$team_id = WP_User_Teams::create_team( 'AddInherit', 'add-inherit', 'editor' );
+		$team_id = Plugin::create_team( 'AddInherit', 'add-inherit', 'editor' );
 		$blog2   = self::factory()->blog->create();
 
 		$this->post_form( array(
-			'_wpnonce' => wp_create_nonce( WP_User_Teams_Admin::NONCE_ACTION ),
+			'_wpnonce' => wp_create_nonce( Admin::NONCE_ACTION ),
 			'team_id'  => (string) $team_id,
 			'blog_id'  => (string) $blog2,
 			'role'     => '',
@@ -95,7 +97,7 @@ class Test_Admin extends WP_UnitTestCase {
 
 		$this->run_handler_expecting_redirect( array( $this->admin, 'handle_add_site' ) );
 
-		$this->assertSame( array( $blog2 => '' ), WP_User_Teams::get_team_site_roles( $team_id ) );
+		$this->assertSame( array( $blog2 => '' ), Plugin::get_team_site_roles( $team_id ) );
 	}
 
 	/* ------------------------------------------------------------------
@@ -104,7 +106,7 @@ class Test_Admin extends WP_UnitTestCase {
 
 	public function test_site_admin_without_network_rights_can_attach_team_to_own_site() {
 
-		$team_id = WP_User_Teams::create_team( 'AttachByAdmin', 'attach-admin', 'editor' );
+		$team_id = Plugin::create_team( 'AttachByAdmin', 'attach-admin', 'editor' );
 		$blog2   = self::factory()->blog->create();
 
 		// Site admin on $blog2, not a super admin.
@@ -114,7 +116,7 @@ class Test_Admin extends WP_UnitTestCase {
 		switch_to_blog( $blog2 );
 
 		$this->post_form( array(
-			'_wpnonce' => wp_create_nonce( WP_User_Teams_Admin::NONCE_ACTION ),
+			'_wpnonce' => wp_create_nonce( Admin::NONCE_ACTION ),
 			'team_id'  => (string) $team_id,
 			'blog_id'  => (string) $blog2,
 			'role'     => 'author',
@@ -125,13 +127,13 @@ class Test_Admin extends WP_UnitTestCase {
 		restore_current_blog();
 		wp_set_current_user( $this->admin_user_id );
 
-		$roles = WP_User_Teams::get_team_site_roles( $team_id );
+		$roles = Plugin::get_team_site_roles( $team_id );
 		$this->assertSame( 'author', $roles[ $blog2 ] ?? null, 'site admin must be able to attach a team to their own site' );
 	}
 
 	public function test_user_without_blog_role_cannot_attach_team() {
 
-		$team_id = WP_User_Teams::create_team( 'NoRights', 'no-rights', 'editor' );
+		$team_id = Plugin::create_team( 'NoRights', 'no-rights', 'editor' );
 		$blog2   = self::factory()->blog->create();
 
 		// Random subscriber on the main site, no role on $blog2.
@@ -139,7 +141,7 @@ class Test_Admin extends WP_UnitTestCase {
 		wp_set_current_user( $sub_id );
 
 		$this->post_form( array(
-			'_wpnonce' => wp_create_nonce( WP_User_Teams_Admin::NONCE_ACTION ),
+			'_wpnonce' => wp_create_nonce( Admin::NONCE_ACTION ),
 			'team_id'  => (string) $team_id,
 			'blog_id'  => (string) $blog2,
 			'role'     => 'author',
@@ -151,24 +153,24 @@ class Test_Admin extends WP_UnitTestCase {
 
 		wp_set_current_user( $this->admin_user_id );
 
-		$this->assertSame( array(), WP_User_Teams::get_team_site_roles( $team_id ) );
+		$this->assertSame( array(), Plugin::get_team_site_roles( $team_id ) );
 	}
 
 	public function test_handle_remove_site_removes_grant() {
 
 		$blog2   = self::factory()->blog->create();
-		$team_id = WP_User_Teams::create_team( 'RmSite', 'rmsite', '' );
-		WP_User_Teams::set_team_sites( $team_id, array( $blog2 => 'editor' ) );
+		$team_id = Plugin::create_team( 'RmSite', 'rmsite', '' );
+		Plugin::set_team_sites( $team_id, array( $blog2 => 'editor' ) );
 
 		$this->get_query( array(
 			'team_id'  => (string) $team_id,
 			'blog_id'  => (string) $blog2,
-			'_wpnonce' => wp_create_nonce( WP_User_Teams_Admin::NONCE_ACTION ),
+			'_wpnonce' => wp_create_nonce( Admin::NONCE_ACTION ),
 		) );
 
 		$this->run_handler_expecting_redirect( array( $this->admin, 'handle_remove_site' ) );
 
-		$this->assertSame( array(), WP_User_Teams::get_team_site_roles( $team_id ) );
+		$this->assertSame( array(), Plugin::get_team_site_roles( $team_id ) );
 	}
 
 	/* ------------------------------------------------------------------
@@ -176,16 +178,16 @@ class Test_Admin extends WP_UnitTestCase {
 	 * ---------------------------------------------------------------- */
 
 	public function test_handle_delete_removes_team() {
-		$team_id = WP_User_Teams::create_team( 'Gone', 'gone', 'editor' );
+		$team_id = Plugin::create_team( 'Gone', 'gone', 'editor' );
 
 		$this->get_query( array(
 			'team_id'  => (string) $team_id,
-			'_wpnonce' => wp_create_nonce( WP_User_Teams_Admin::NONCE_ACTION ),
+			'_wpnonce' => wp_create_nonce( Admin::NONCE_ACTION ),
 		) );
 
 		$this->run_handler_expecting_redirect( array( $this->admin, 'handle_delete' ) );
 
-		$this->assertNull( WP_User_Teams::get_team( $team_id ) );
+		$this->assertNull( Plugin::get_team( $team_id ) );
 	}
 
 	/* ------------------------------------------------------------------
@@ -193,33 +195,33 @@ class Test_Admin extends WP_UnitTestCase {
 	 * ---------------------------------------------------------------- */
 
 	public function test_save_user_field_sets_team_membership() {
-		$team_id = WP_User_Teams::create_team( 'Contributors', 'contrib', 'contributor' );
+		$team_id = Plugin::create_team( 'Contributors', 'contrib', 'contributor' );
 		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 
 		$this->post_form( array(
-			'wput_user_nonce' => wp_create_nonce( WP_User_Teams_Admin::USER_NONCE ),
+			'wput_user_nonce' => wp_create_nonce( Admin::USER_NONCE ),
 			'wput_teams'      => array( (string) $team_id ),
 		) );
 
 		$this->admin->save_user_field( $user_id );
 
-		$ids = WP_User_Teams::get_user_team_ids( $user_id );
+		$ids = Plugin::get_user_team_ids( $user_id );
 		$this->assertContains( $team_id, $ids );
 	}
 
 	public function test_save_user_field_with_no_selection_clears_memberships() {
-		$team_id = WP_User_Teams::create_team( 'Drop', 'drop', 'editor' );
+		$team_id = Plugin::create_team( 'Drop', 'drop', 'editor' );
 		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
-		WP_User_Teams::add_user_to_team( $user_id, $team_id );
+		Plugin::add_user_to_team( $user_id, $team_id );
 
 		$this->post_form( array(
-			'wput_user_nonce' => wp_create_nonce( WP_User_Teams_Admin::USER_NONCE ),
+			'wput_user_nonce' => wp_create_nonce( Admin::USER_NONCE ),
 			// wput_teams intentionally omitted.
 		) );
 
 		$this->admin->save_user_field( $user_id );
 
-		$this->assertSame( array(), WP_User_Teams::get_user_team_ids( $user_id ) );
+		$this->assertSame( array(), Plugin::get_user_team_ids( $user_id ) );
 	}
 
 	/* ------------------------------------------------------------------
