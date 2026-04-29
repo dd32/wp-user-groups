@@ -83,8 +83,9 @@ class Admin {
 		add_filter( 'user_row_actions', array( $this, 'filter_user_row_actions' ), 10, 2 );
 
 		// Style team account rows distinctly (background, "Team" badge
-		// before the login) on both the per-site and network users lists.
-		add_action( 'admin_head', array( $this, 'print_team_row_styles' ) );
+		// before the login) on both the per-site and network users lists,
+		// and ship the relocator script for the per-site user-new.php form.
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
 	}
 
 	public function include_team_users_on_users_screens( $query ) {
@@ -106,7 +107,7 @@ class Admin {
 		// Users → Teams. Only super admins see actions on team rows;
 		// regular site admins get an empty action list (they still see
 		// the row, just not the links).
-		if ( ! current_user_can( self::required_cap() ) ) {
+		if ( ! current_user_can( 'manage_network_users' ) ) {
 			return array();
 		}
 		$edit_url   = $this->page_url( array( 'action' => 'edit', 'team_id' => (int) $user->ID ) );
@@ -127,124 +128,64 @@ class Admin {
 		);
 	}
 
-	public function print_team_row_styles() {
+	/**
+	 * Enqueues the Users list assets (team-row styling + JS) and the
+	 * per-site user-new.php form relocator. Hook target:
+	 * `admin_enqueue_scripts` so static assets ship as proper enqueues
+	 * rather than inline `<style>` / `<script>` blocks.
+	 */
+	public function enqueue_admin_assets() {
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		if ( ! $screen || ( 'users' !== $screen->base && 'users-network' !== $screen->base ) ) {
+		if ( ! $screen ) {
 			return;
 		}
-		$team_names = array();
-		foreach ( Plugin::get_all_teams() as $team_id => $team ) {
-			$team_names[ (int) $team_id ] = $team['name'];
-		}
-		if ( empty( $team_names ) ) {
-			return;
-		}
-		// Target a class rather than `#user-{id}` because the network
-		// users list (`WP_MS_Users_List_Table::display_rows`) renders
-		// `<tr>` without an id. The JS below tags both per-site and
-		// network team rows with `wput-team-row`.
-		echo <<<'CSS'
-		<style>
-		tr.wput-team-row {
-			background: #f6f7f7;
-		}
-		tr.wput-team-row td {
-			border-top: 3px solid #e5e5e5;
-		}
-		tr.wput-team-row .column-username strong::before {
-			content: 'Team';
-			display: inline-block;
-			font-size: 10px;
-			text-transform: uppercase;
-			letter-spacing: 0.04em;
-			font-weight: 600;
-			color: #2271b1;
-			background: #e7f1fb;
-			border-radius: 3px;
-			padding: 2px 6px;
-			margin-right: 6px;
-			vertical-align: middle;
-		}
-		/* Hide the auto-generated `_team_*` login line in the username cell. */
-		tr.wput-team-row .column-username .row-actions + br + span,
-		tr.wput-team-row .column-username > br,
-		tr.wput-team-row .column-username > span:not(.wput-role) {
-			display: none;
-		}
-		/* Drop the placeholder `*@teams.internal` mailto — show a dash instead. */
-		tr.wput-team-row .column-email a {
-			display: none;
-		}
-		tr.wput-team-row .column-email::before {
-			content: '—';
-			color: #646970;
-		}
-		</style>
-		CSS;
-		echo "\n";
 
-		$team_names_json = wp_json_encode( $team_names );
-		$member_teams    = wp_json_encode( $this->collect_member_team_names_for_screen() );
-		?>
-		<script>
-		( function () {
-			var teamNames  = <?php echo $team_names_json; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_json_encode output is safe in JS context. ?>;
-			var memberTeams = <?php echo $member_teams; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_json_encode output is safe in JS context. ?>;
-
-			// Per-site Users list gives each row `id="user-{id}"`. The
-			// network list's `<tr>` has no id — find it by the bulk
-			// checkbox `#blog_{id}`. Returns `null` if neither is on page.
-			function findUserRow( id ) {
-				var row = document.getElementById( 'user-' + id );
-				if ( row ) { return row; }
-				var cb = document.getElementById( 'blog_' + id );
-				return cb ? cb.closest( 'tr' ) : null;
+		if ( 'users' === $screen->base || 'users-network' === $screen->base ) {
+			$team_names = array();
+			foreach ( Plugin::get_all_teams() as $team_id => $team ) {
+				$team_names[ (int) $team_id ] = $team['name'];
+			}
+			if ( empty( $team_names ) ) {
+				return;
 			}
 
-			document.addEventListener( 'DOMContentLoaded', function () {
-				Object.keys( teamNames ).forEach( function ( id ) {
-					var row = findUserRow( id );
-					if ( ! row ) { return; }
-					row.classList.add( 'wput-team-row' );
-					var displayName = teamNames[ id ];
+			// Target a class rather than `#user-{id}` because the network
+			// users list (`WP_MS_Users_List_Table::display_rows`) renders
+			// `<tr>` without an id. The JS tags both per-site and network
+			// team rows with `wput-team-row`.
+			wp_enqueue_style(
+				'wput-users-list',
+				plugins_url( 'assets/css/users-list.css', USER_TEAMS_FILE ),
+				array(),
+				USER_TEAMS_VERSION
+			);
+			wp_enqueue_script(
+				'wput-users-list',
+				plugins_url( 'assets/js/users-list.js', USER_TEAMS_FILE ),
+				array(),
+				USER_TEAMS_VERSION,
+				true
+			);
+			wp_localize_script(
+				'wput-users-list',
+				'wpUserTeamsUsersList',
+				array(
+					'teamNames'   => (object) $team_names,
+					'memberTeams' => (object) $this->collect_member_team_names_for_screen(),
+				)
+			);
+			return;
+		}
 
-					// Walk text nodes in the username cell. The `_team_*`
-					// login appears either inside the `<a>` (network Users
-					// list) or as a sibling text node after `<br />`
-					// (per-site Users list). Replace the in-link text with
-					// the team's display name; drop the sibling copy.
-					var username = row.querySelector( '.column-username' );
-					if ( ! username ) { return; }
-					var walker = document.createTreeWalker( username, NodeFilter.SHOW_TEXT );
-					var inLink = [];
-					var outside = [];
-					while ( walker.nextNode() ) {
-						var node = walker.currentNode;
-						if ( ! /^\s*_team_/.test( node.nodeValue ) ) { continue; }
-						if ( node.parentNode && node.parentNode.tagName === 'A' ) {
-							inLink.push( node );
-						} else {
-							outside.push( node );
-						}
-					}
-					inLink.forEach( function ( n ) { n.nodeValue = displayName; } );
-					outside.forEach( function ( n ) { n.parentNode.removeChild( n ); } );
-				} );
-
-				// Append " — Team A, Team B" to member usernames, matching
-				// WP's own "— Super Admin" marker. Skip team-user rows.
-				Object.keys( memberTeams ).forEach( function ( uid ) {
-					if ( teamNames[ uid ] ) { return; }
-					var row = findUserRow( uid );
-					if ( ! row ) { return; }
-					var strong = row.querySelector( '.column-username strong' );
-					if ( ! strong ) { return; }
-					strong.appendChild( document.createTextNode( ' \u2014 ' + memberTeams[ uid ].join( ', ' ) ) );
-				} );
-			} );
-		} )();
-		</script>
-		<?php
+		if ( 'user' === $screen->base && current_user_can( 'promote_users' ) ) {
+			wp_enqueue_script(
+				'wput-user-new-relocate',
+				plugins_url( 'assets/js/user-new-relocate.js', USER_TEAMS_FILE ),
+				array(),
+				USER_TEAMS_VERSION,
+				true
+			);
+		}
 	}
 
 	/**
@@ -271,18 +212,6 @@ class Admin {
 	}
 
 	/* ------------------------------------------------------------------
-	 * Capability gate
-	 * ---------------------------------------------------------------- */
-
-	public static function required_cap() {
-		return 'manage_network_users';
-	}
-
-	private function current_user_can_manage() {
-		return current_user_can( self::required_cap() );
-	}
-
-	/* ------------------------------------------------------------------
 	 * Menu registration
 	 * ---------------------------------------------------------------- */
 
@@ -291,7 +220,7 @@ class Admin {
 			'users.php',
 			__( 'User Teams', 'user-teams' ),
 			__( 'Teams', 'user-teams' ),
-			self::required_cap(),
+			'manage_network_users',
 			self::PAGE_SLUG,
 			array( $this, 'render_page' )
 		);
@@ -302,7 +231,7 @@ class Admin {
 	 * ---------------------------------------------------------------- */
 
 	public function render_page() {
-		if ( ! $this->current_user_can_manage() ) {
+		if ( ! current_user_can( 'manage_network_users' ) ) {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'user-teams' ) );
 		}
 
@@ -642,7 +571,7 @@ class Admin {
 	public function handle_save() {
 		check_admin_referer( self::NONCE_ACTION );
 
-		if ( ! $this->current_user_can_manage() ) {
+		if ( ! current_user_can( 'manage_network_users' ) ) {
 			wp_die( esc_html__( 'You do not have permission to manage teams.', 'user-teams' ) );
 		}
 
@@ -677,7 +606,7 @@ class Admin {
 	public function handle_delete() {
 		check_admin_referer( self::NONCE_ACTION );
 
-		if ( ! $this->current_user_can_manage() ) {
+		if ( ! current_user_can( 'manage_network_users' ) ) {
 			wp_die( esc_html__( 'You do not have permission to manage teams.', 'user-teams' ) );
 		}
 
@@ -695,7 +624,7 @@ class Admin {
 	 * ---------------------------------------------------------------- */
 
 	public function render_user_field( $user ) {
-		if ( ! $this->current_user_can_manage() ) {
+		if ( ! current_user_can( 'manage_network_users' ) ) {
 			return;
 		}
 
@@ -880,24 +809,6 @@ class Admin {
 				<?php submit_button( __( 'Add Team', 'user-teams' ), 'primary', 'wput_attach_submit' ); ?>
 			</form>
 		</div>
-		<script>
-		document.addEventListener( 'DOMContentLoaded', function () {
-			var el = document.querySelector( '.wput-add-team-to-site' );
-			if ( ! el ) { return; }
-			var selectors = ( el.getAttribute( 'data-wput-relocate-below' ) || '' ).split( ',' );
-			var anchor = null;
-			for ( var i = 0; i < selectors.length; i++ ) {
-				var candidates = document.querySelectorAll( selectors[ i ].trim() );
-				if ( candidates.length ) {
-					anchor = candidates[ candidates.length - 1 ];
-					break;
-				}
-			}
-			if ( anchor && anchor.parentNode ) {
-				anchor.parentNode.insertBefore( el, anchor.nextSibling );
-			}
-		} );
-		</script>
 		<?php
 	}
 
@@ -907,7 +818,7 @@ class Admin {
 	public function handle_add_site() {
 		check_admin_referer( self::NONCE_ACTION );
 
-		if ( ! $this->current_user_can_manage() ) {
+		if ( ! current_user_can( 'manage_network_users' ) ) {
 			wp_die( esc_html__( 'You do not have permission to manage teams.', 'user-teams' ) );
 		}
 
@@ -933,7 +844,7 @@ class Admin {
 	public function handle_remove_site() {
 		check_admin_referer( self::NONCE_ACTION );
 
-		if ( ! $this->current_user_can_manage() ) {
+		if ( ! current_user_can( 'manage_network_users' ) ) {
 			wp_die( esc_html__( 'You do not have permission to manage teams.', 'user-teams' ) );
 		}
 
@@ -989,7 +900,7 @@ class Admin {
 	}
 
 	public function save_user_field( $user_id ) {
-		if ( ! $this->current_user_can_manage() ) {
+		if ( ! current_user_can( 'manage_network_users' ) ) {
 			return;
 		}
 		if ( empty( $_POST['wput_user_nonce'] ) || ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['wput_user_nonce'] ) ), self::USER_NONCE ) ) {
