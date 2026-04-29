@@ -153,17 +153,19 @@ class Admin {
 			// users list (`WP_MS_Users_List_Table::display_rows`) renders
 			// `<tr>` without an id. The JS tags both per-site and network
 			// team rows with `wput-team-row`.
+			$css = 'assets/css/users-list.css';
+			$js  = 'assets/js/users-list.js';
 			wp_enqueue_style(
 				'wput-users-list',
-				plugins_url( 'assets/css/users-list.css', USER_TEAMS_FILE ),
+				plugins_url( $css, USER_TEAMS_FILE ),
 				array(),
-				USER_TEAMS_VERSION
+				filemtime( USER_TEAMS_PATH . $css )
 			);
 			wp_enqueue_script(
 				'wput-users-list',
-				plugins_url( 'assets/js/users-list.js', USER_TEAMS_FILE ),
+				plugins_url( $js, USER_TEAMS_FILE ),
 				array(),
-				USER_TEAMS_VERSION,
+				filemtime( USER_TEAMS_PATH . $js ),
 				true
 			);
 			wp_localize_script(
@@ -178,11 +180,12 @@ class Admin {
 		}
 
 		if ( 'user' === $screen->base && current_user_can( 'promote_users' ) ) {
+			$js = 'assets/js/user-new-relocate.js';
 			wp_enqueue_script(
 				'wput-user-new-relocate',
-				plugins_url( 'assets/js/user-new-relocate.js', USER_TEAMS_FILE ),
+				plugins_url( $js, USER_TEAMS_FILE ),
 				array(),
-				USER_TEAMS_VERSION,
+				filemtime( USER_TEAMS_PATH . $js ),
 				true
 			);
 		}

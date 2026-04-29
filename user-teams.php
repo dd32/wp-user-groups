@@ -17,7 +17,6 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'USER_TEAMS_VERSION', '0.2.2' );
 define( 'USER_TEAMS_FILE', __FILE__ );
 define( 'USER_TEAMS_PATH', plugin_dir_path( __FILE__ ) );
 
