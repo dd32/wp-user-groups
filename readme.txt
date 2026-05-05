@@ -4,7 +4,7 @@ Tags: users, roles, multisite, team, permissions
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.2.2
+Stable tag: 0.2.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -95,6 +95,9 @@ On GitHub at [dd32/wp-user-teams](https://github.com/dd32/wp-user-teams). That's
 File it on [GitHub](https://github.com/dd32/wp-user-teams/issues). General support questions belong in the [WordPress.org Support Forums](https://wordpress.org/support/plugin/user-teams/).
 
 == Changelog ==
+
+= 0.2.3 =
+* No code changes; version bumped to resubmit 0.2.2 build to the WordPress.org review queue.
 
 = 0.2.2 =
 * Move admin assets out of inline `<style>` / `<script>` tags into proper enqueued files.
