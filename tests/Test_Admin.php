@@ -199,8 +199,8 @@ class Test_Admin extends WP_UnitTestCase {
 		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 
 		$this->post_form( array(
-			'wput_user_nonce' => wp_create_nonce( Admin::USER_NONCE ),
-			'wput_teams'      => array( (string) $team_id ),
+			'user_teams_user_nonce' => wp_create_nonce( Admin::USER_NONCE ),
+			'user_teams_teams'      => array( (string) $team_id ),
 		) );
 
 		$this->admin->save_user_field( $user_id );
@@ -215,8 +215,8 @@ class Test_Admin extends WP_UnitTestCase {
 		Plugin::add_user_to_team( $user_id, $team_id );
 
 		$this->post_form( array(
-			'wput_user_nonce' => wp_create_nonce( Admin::USER_NONCE ),
-			// wput_teams intentionally omitted.
+			'user_teams_user_nonce' => wp_create_nonce( Admin::USER_NONCE ),
+			// user_teams_teams intentionally omitted.
 		) );
 
 		$this->admin->save_user_field( $user_id );

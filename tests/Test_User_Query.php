@@ -54,9 +54,9 @@ class Test_User_Query extends WP_UnitTestCase {
 
 		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		// Sprinkle extra usermeta so the LEFT JOIN would expand without DISTINCT.
-		update_user_meta( $uid, 'wput_a', 1 );
-		update_user_meta( $uid, 'wput_b', 2 );
-		update_user_meta( $uid, 'wput_c', 3 );
+		update_user_meta( $uid, 'noise_a', 1 );
+		update_user_meta( $uid, 'noise_b', 2 );
+		update_user_meta( $uid, 'noise_c', 3 );
 		Plugin::add_user_to_team( $uid, $tid );
 
 		$query = new WP_User_Query( array( 'blog_id' => $blog2, 'fields' => 'ID', 'count_total' => true ) );
@@ -150,9 +150,9 @@ class Test_User_Query extends WP_UnitTestCase {
 
 		$views = $this->admin->filter_user_views( array( 'all' => '<a>All</a>' ) );
 
-		$this->assertArrayHasKey( 'wput-team-' . $t_populated, $views, 'populated team should appear' );
-		$this->assertArrayNotHasKey( 'wput-team-' . $t_empty, $views, 'empty team should be hidden' );
-		$this->assertStringContainsString( 'via Populated', $views[ 'wput-team-' . $t_populated ] );
+		$this->assertArrayHasKey( 'user-team-team-' . $t_populated, $views, 'populated team should appear' );
+		$this->assertArrayNotHasKey( 'user-team-team-' . $t_empty, $views, 'empty team should be hidden' );
+		$this->assertStringContainsString( 'via Populated', $views[ 'user-team-team-' . $t_populated ] );
 	}
 
 	public function test_views_filter_hides_teams_that_dont_cover_current_site() {
@@ -169,7 +169,7 @@ class Test_User_Query extends WP_UnitTestCase {
 		$views = $this->admin->filter_user_views( array( 'all' => '<a>All</a>' ) );
 		restore_current_blog();
 
-		$this->assertArrayNotHasKey( 'wput-team-' . $covers_only_blog3, $views, 'team scoped to blog3 must not appear on blog2 users list' );
+		$this->assertArrayNotHasKey( 'user-team-team-' . $covers_only_blog3, $views, 'team scoped to blog3 must not appear on blog2 users list' );
 	}
 
 	public function test_views_filter_base_url_strips_other_view_args() {
@@ -180,7 +180,7 @@ class Test_User_Query extends WP_UnitTestCase {
 		$_SERVER['REQUEST_URI'] = '/wp-admin/users.php?role=administrator&paged=3&s=foo';
 
 		$views = $this->admin->filter_user_views( array( 'all' => '<a>All</a>' ) );
-		$html  = $views[ 'wput-team-' . $tid ] ?? '';
+		$html  = $views[ 'user-team-team-' . $tid ] ?? '';
 
 		$this->assertStringContainsString( 'team=' . $tid, $html );
 		$this->assertStringNotContainsString( 'role=administrator', $html, 'role filter must not carry over' );
