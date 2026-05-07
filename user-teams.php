@@ -3,7 +3,7 @@
  * Plugin Name:       User Teams
  * Plugin URI:        https://github.com/dd32/wp-user-teams
  * Description:       Unix-style user groups for WordPress multisite, exposed as "Teams". Define teams, attach a role to each, and grant access to users by team membership across the network.
- * Version:           0.2.3
+ * Version:           0.2.4
  * Requires at least: 6.9
  * Tested up to:      7.0
  * Requires PHP:      7.4
