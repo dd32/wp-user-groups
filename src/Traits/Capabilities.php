@@ -17,7 +17,7 @@ trait Capabilities {
 	 * the role that applies on `$blog_id`, and unions the role's
 	 * capabilities into the result.
 	 *
-	 * Filterable via `wput_team_caps_for_user` — callers can add, strip,
+	 * Filterable via `user_teams_team_caps_for_user` — callers can add, strip,
 	 * or gate capabilities without replacing the whole fan-out.
 	 *
 	 * @param int      $user_id  User whose team-derived caps to compute.
@@ -56,7 +56,7 @@ trait Capabilities {
 		 * @param int                $user_id  User ID the caps apply to.
 		 * @param int                $blog_id  Blog ID the caps were resolved for.
 		 */
-		return apply_filters( 'wput_team_caps_for_user', $caps, $user_id, $blog_id );
+		return apply_filters( 'user_teams_team_caps_for_user', $caps, $user_id, $blog_id );
 	}
 
 	/**

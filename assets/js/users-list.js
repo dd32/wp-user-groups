@@ -1,5 +1,5 @@
 ( function () {
-	var data        = window.wpUserTeamsUsersList || {};
+	var data        = window.userTeamsUsersList || {};
 	var teamNames   = data.teamNames || {};
 	var memberTeams = data.memberTeams || {};
 
@@ -17,7 +17,7 @@
 		Object.keys( teamNames ).forEach( function ( id ) {
 			var row = findUserRow( id );
 			if ( ! row ) { return; }
-			row.classList.add( 'wput-team-row' );
+			row.classList.add( 'user-team-team-row' );
 			var displayName = teamNames[ id ];
 
 			// Walk text nodes in the username cell. The `_team_*`

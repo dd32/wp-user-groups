@@ -100,7 +100,7 @@ trait SiteScope {
 	 * A team applies to a site when it has a Global Role (network-wide
 	 * coverage) or an explicit per-site grant for that blog.
 	 *
-	 * Filterable via `wput_team_applies_to_site` for callers that want to
+	 * Filterable via `user_teams_team_applies_to_site` for callers that want to
 	 * gate coverage (e.g. pause a team during a freeze, or restrict to
 	 * sites matching a pattern).
 	 */
@@ -121,7 +121,7 @@ trait SiteScope {
 		 * @param int   $blog_id  Blog ID being checked.
 		 * @param array $team     Full team record, including `role` and `sites`.
 		 */
-		return (bool) apply_filters( 'wput_team_applies_to_site', $applies, (int) $team_id, $blog_id, $team );
+		return (bool) apply_filters( 'user_teams_team_applies_to_site', $applies, (int) $team_id, $blog_id, $team );
 	}
 
 	/**

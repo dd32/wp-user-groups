@@ -1,10 +1,10 @@
-tr.wput-team-row {
+tr.user-team-team-row {
 	background: #f6f7f7;
 }
-tr.wput-team-row td {
+tr.user-team-team-row td {
 	border-top: 3px solid #e5e5e5;
 }
-tr.wput-team-row .column-username strong::before {
+tr.user-team-team-row .column-username strong::before {
 	content: 'Team';
 	display: inline-block;
 	font-size: 10px;
@@ -19,16 +19,16 @@ tr.wput-team-row .column-username strong::before {
 	vertical-align: middle;
 }
 /* Hide the auto-generated `_team_*` login line in the username cell. */
-tr.wput-team-row .column-username .row-actions + br + span,
-tr.wput-team-row .column-username > br,
-tr.wput-team-row .column-username > span:not(.wput-role) {
+tr.user-team-team-row .column-username .row-actions + br + span,
+tr.user-team-team-row .column-username > br,
+tr.user-team-team-row .column-username > span:not(.user-team-role) {
 	display: none;
 }
 /* Drop the placeholder `*@teams.internal` mailto — show a dash instead. */
-tr.wput-team-row .column-email a {
+tr.user-team-team-row .column-email a {
 	display: none;
 }
-tr.wput-team-row .column-email::before {
+tr.user-team-team-row .column-email::before {
 	content: '—';
 	color: #646970;
 }

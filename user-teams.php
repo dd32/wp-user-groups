@@ -15,30 +15,25 @@
  * Network:           true
  */
 
-defined( 'ABSPATH' ) || exit;
+namespace dd32\WordPress\UserTeams;
 
-define( 'USER_TEAMS_FILE', __FILE__ );
-define( 'USER_TEAMS_PATH', plugin_dir_path( __FILE__ ) );
-
-// The `Network: true` plugin header means this plugin is only
-// available to activate on multisite — WordPress hides the Activate
-// link on single-site installs. That's the contract for the plugin;
-// no further is_multisite() guards are needed below this line.
+const PLUGIN_FILE = __FILE__;
+const PLUGIN_DIR  = __DIR__ . '/';
 
 // PSR-4 autoloader for `dd32\WordPress\UserTeams\…` → `src/…`. Keeps
 // the plugin self-contained so it doesn't require a `composer install`
 // in the deploy path.
 spl_autoload_register( function ( $class ) {
-	$prefix = 'dd32\\WordPress\\UserTeams\\';
+	$prefix = __NAMESPACE__ . '\\';
 	if ( 0 !== strncmp( $class, $prefix, strlen( $prefix ) ) ) {
 		return;
 	}
 	$relative = substr( $class, strlen( $prefix ) );
-	$path     = USER_TEAMS_PATH . 'src/' . str_replace( '\\', '/', $relative ) . '.php';
+	$path     = __DIR__ . '/src/' . str_replace( '\\', '/', $relative ) . '.php';
 	if ( file_exists( $path ) ) {
 		require $path;
 	}
 } );
 
-dd32\WordPress\UserTeams\Plugin::instance();
-dd32\WordPress\UserTeams\Admin::instance();
+Plugin::instance();
+Admin::instance();

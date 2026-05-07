@@ -49,9 +49,9 @@ Team management is restricted to super admins so a compromised single-site admin
 
 = Extension filters =
 
-* `wput_team_caps_for_user( $caps, $user_id, $blog_id )` — modify the capability map computed from a user's teams.
-* `wput_team_applies_to_site( $applies, $team_id, $blog_id, $team )` — gate coverage (e.g. pause a team during a freeze).
-* `wput_team_save_data( $data, $team_id_or_null, $op )` — filter sanitised input on create/update.
+* `user_teams_team_caps_for_user( $caps, $user_id, $blog_id )` — modify the capability map computed from a user's teams.
+* `user_teams_team_applies_to_site( $applies, $team_id, $blog_id, $team )` — gate coverage (e.g. pause a team during a freeze).
+* `user_teams_team_save_data( $data, $team_id_or_null, $op )` — filter sanitised input on create/update.
 
 == Frequently Asked Questions ==
 
@@ -65,7 +65,7 @@ Nothing is persisted on the user, so removing them from the team drops the team-
 
 = Where are teams stored? =
 
-Each team is a real `wp_users` row (a "team account") marked with `wput_is_team` meta. Per-site role grants use native `wp_{blog_id}_capabilities` meta on that row. Memberships are on the member user's own `wp_user_teams` meta. No custom tables.
+Each team is a real `wp_users` row (a "team account") marked with `user_teams_is_team` meta. Per-site role grants use native `wp_{blog_id}_capabilities` meta on that row. Memberships are on the member user's own `user_teams` meta. No custom tables.
 
 = How do I create a team programmatically? =
 

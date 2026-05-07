@@ -1,7 +1,7 @@
 <?php
 /**
  * User ↔ Team membership. Memberships are stored on the member user's
- * own meta (`wp_user_teams` → array of team user IDs); team roles
+ * own meta (`user_teams` → array of team user IDs); team roles
  * fan out at runtime via `user_has_cap` rather than being written into
  * the member's native capabilities.
  */

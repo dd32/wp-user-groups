@@ -12,13 +12,11 @@ namespace dd32\WordPress\UserTeams;
 use WP_Error;
 use WP_User;
 
-defined( 'ABSPATH' ) || exit;
-
 class Admin {
 
 	const PAGE_SLUG    = 'user-teams';
-	const NONCE_ACTION = 'wp_user_teams';
-	const USER_NONCE   = 'wp_user_teams_user';
+	const NONCE_ACTION = 'user_teams';
+	const USER_NONCE   = 'user_teams_user';
 
 	private static $instance;
 
@@ -34,11 +32,11 @@ class Admin {
 		// Network Admin → Users → Teams.
 		add_action( 'network_admin_menu', array( $this, 'register_network_menu' ) );
 
-		add_action( 'admin_post_wp_user_teams_save', array( $this, 'handle_save' ) );
-		add_action( 'admin_post_wp_user_teams_delete', array( $this, 'handle_delete' ) );
-		add_action( 'admin_post_wp_user_teams_add_site', array( $this, 'handle_add_site' ) );
-		add_action( 'admin_post_wp_user_teams_remove_site', array( $this, 'handle_remove_site' ) );
-		add_action( 'admin_post_wp_user_teams_attach_site', array( $this, 'handle_attach_team_to_site' ) );
+		add_action( 'admin_post_user_teams_save', array( $this, 'handle_save' ) );
+		add_action( 'admin_post_user_teams_delete', array( $this, 'handle_delete' ) );
+		add_action( 'admin_post_user_teams_add_site', array( $this, 'handle_add_site' ) );
+		add_action( 'admin_post_user_teams_remove_site', array( $this, 'handle_remove_site' ) );
+		add_action( 'admin_post_user_teams_attach_site', array( $this, 'handle_attach_team_to_site' ) );
 
 		add_action( 'show_user_profile', array( $this, 'render_user_field' ) );
 		add_action( 'edit_user_profile', array( $this, 'render_user_field' ) );
@@ -114,7 +112,7 @@ class Admin {
 		$remove_url = wp_nonce_url(
 			add_query_arg(
 				array(
-					'action'  => 'wp_user_teams_remove_site',
+					'action'  => 'user_teams_remove_site',
 					'team_id' => (int) $user->ID,
 					'blog_id' => (int) get_current_blog_id(),
 				),
@@ -123,8 +121,8 @@ class Admin {
 			self::NONCE_ACTION
 		);
 		return array(
-			'wput-edit-team'        => '<a href="' . esc_url( $edit_url ) . '">' . esc_html__( 'Edit team', 'user-teams' ) . '</a>',
-			'wput-remove-from-site' => '<a href="' . esc_url( $remove_url ) . '" class="submitdelete" onclick="return confirm(\'' . esc_js( __( 'Remove this team from the site? Members lose the team-granted role here.', 'user-teams' ) ) . '\');">' . esc_html__( 'Remove from site', 'user-teams' ) . '</a>',
+			'user-team-edit-team'        => '<a href="' . esc_url( $edit_url ) . '">' . esc_html__( 'Edit team', 'user-teams' ) . '</a>',
+			'user-team-remove-from-site' => '<a href="' . esc_url( $remove_url ) . '" class="submitdelete" onclick="return confirm(\'' . esc_js( __( 'Remove this team from the site? Members lose the team-granted role here.', 'user-teams' ) ) . '\');">' . esc_html__( 'Remove from site', 'user-teams' ) . '</a>',
 		);
 	}
 
@@ -152,25 +150,25 @@ class Admin {
 			// Target a class rather than `#user-{id}` because the network
 			// users list (`WP_MS_Users_List_Table::display_rows`) renders
 			// `<tr>` without an id. The JS tags both per-site and network
-			// team rows with `wput-team-row`.
+			// team rows with `user-team-team-row`.
 			$css = 'assets/css/users-list.css';
 			$js  = 'assets/js/users-list.js';
 			wp_enqueue_style(
-				'wput-users-list',
-				plugins_url( $css, USER_TEAMS_FILE ),
+				'user-team-users-list',
+				plugins_url( $css, PLUGIN_FILE ),
 				array(),
-				filemtime( USER_TEAMS_PATH . $css )
+				filemtime( PLUGIN_DIR . $css )
 			);
 			wp_enqueue_script(
-				'wput-users-list',
-				plugins_url( $js, USER_TEAMS_FILE ),
+				'user-team-users-list',
+				plugins_url( $js, PLUGIN_FILE ),
 				array(),
-				filemtime( USER_TEAMS_PATH . $js ),
+				filemtime( PLUGIN_DIR . $js ),
 				true
 			);
 			wp_localize_script(
-				'wput-users-list',
-				'wpUserTeamsUsersList',
+				'user-team-users-list',
+				'userTeamsUsersList',
 				array(
 					'teamNames'   => (object) $team_names,
 					'memberTeams' => (object) $this->collect_member_team_names_for_screen(),
@@ -182,10 +180,10 @@ class Admin {
 		if ( 'user' === $screen->base && current_user_can( 'promote_users' ) ) {
 			$js = 'assets/js/user-new-relocate.js';
 			wp_enqueue_script(
-				'wput-user-new-relocate',
-				plugins_url( $js, USER_TEAMS_FILE ),
+				'user-team-user-new-relocate',
+				plugins_url( $js, PLUGIN_FILE ),
 				array(),
-				filemtime( USER_TEAMS_PATH . $js ),
+				filemtime( PLUGIN_DIR . $js ),
 				true
 			);
 		}
@@ -291,7 +289,7 @@ class Admin {
 					$delete_url = wp_nonce_url(
 						add_query_arg(
 							array(
-								'action'       => 'wp_user_teams_delete',
+								'action'       => 'user_teams_delete',
 								'team_id'      => $team['id'],
 								'network_wide' => is_network_admin() ? '1' : '0',
 							),
@@ -389,7 +387,7 @@ class Admin {
 			<?php $this->render_admin_notices(); ?>
 
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<input type="hidden" name="action" value="wp_user_teams_save" />
+				<input type="hidden" name="action" value="user_teams_save" />
 				<input type="hidden" name="network_wide" value="<?php echo is_network_admin() ? '1' : '0'; ?>" />
 				<?php if ( $team ) : ?>
 					<input type="hidden" name="team_id" value="<?php echo (int) $team['id']; ?>" />
@@ -398,23 +396,23 @@ class Admin {
 
 				<table class="form-table" role="presentation">
 					<tr>
-						<th scope="row"><label for="wput-name"><?php esc_html_e( 'Name', 'user-teams' ); ?></label></th>
+						<th scope="row"><label for="user-team-name"><?php esc_html_e( 'Name', 'user-teams' ); ?></label></th>
 						<td>
-							<input name="name" type="text" id="wput-name" value="<?php echo esc_attr( $team ? $team['name'] : '' ); ?>" class="regular-text" required />
+							<input name="name" type="text" id="user-team-name" value="<?php echo esc_attr( $team ? $team['name'] : '' ); ?>" class="regular-text" required />
 							<p class="description"><?php esc_html_e( 'Display name, e.g. "WordPress Meta Team".', 'user-teams' ); ?></p>
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="wput-slug"><?php esc_html_e( 'Slug', 'user-teams' ); ?></label></th>
+						<th scope="row"><label for="user-team-slug"><?php esc_html_e( 'Slug', 'user-teams' ); ?></label></th>
 						<td>
-							<input name="slug" type="text" id="wput-slug" value="<?php echo esc_attr( $team ? $team['slug'] : '' ); ?>" class="regular-text" />
+							<input name="slug" type="text" id="user-team-slug" value="<?php echo esc_attr( $team ? $team['slug'] : '' ); ?>" class="regular-text" />
 							<p class="description"><?php esc_html_e( 'Optional. Auto-generated from the name if left blank.', 'user-teams' ); ?></p>
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="wput-role"><?php esc_html_e( 'Global Role', 'user-teams' ); ?></label></th>
+						<th scope="row"><label for="user-team-role"><?php esc_html_e( 'Global Role', 'user-teams' ); ?></label></th>
 						<td>
-							<select name="role" id="wput-role">
+							<select name="role" id="user-team-role">
 								<option value="" <?php selected( '', $current_role ); ?>><?php esc_html_e( '— Not set —', 'user-teams' ); ?></option>
 								<?php
 								foreach ( wp_roles()->roles as $slug => $data ) {
@@ -498,7 +496,7 @@ class Admin {
 						$remove_url = wp_nonce_url(
 							add_query_arg(
 								array(
-									'action'   => 'wp_user_teams_remove_site',
+									'action'   => 'user_teams_remove_site',
 									'team_id'  => (int) $team['id'],
 									'blog_id'  => (int) $blog_id,
 								),
@@ -529,14 +527,14 @@ class Admin {
 		<?php if ( ! empty( $addable ) ) : ?>
 			<h3 style="margin-top:1.5em;"><?php esc_html_e( 'Add a site', 'user-teams' ); ?></h3>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="max-width:720px;">
-				<input type="hidden" name="action" value="wp_user_teams_add_site" />
+				<input type="hidden" name="action" value="user_teams_add_site" />
 				<input type="hidden" name="team_id" value="<?php echo (int) $team['id']; ?>" />
 				<?php wp_nonce_field( self::NONCE_ACTION ); ?>
 				<table class="form-table" role="presentation">
 					<tr>
-						<th scope="row"><label for="wput-add-site-blog"><?php esc_html_e( 'Site', 'user-teams' ); ?></label></th>
+						<th scope="row"><label for="user-team-add-site-blog"><?php esc_html_e( 'Site', 'user-teams' ); ?></label></th>
 						<td>
-							<select name="blog_id" id="wput-add-site-blog" required>
+							<select name="blog_id" id="user-team-add-site-blog" required>
 								<option value=""><?php esc_html_e( '— Select a site —', 'user-teams' ); ?></option>
 								<?php foreach ( $addable as $site ) : ?>
 									<option value="<?php echo (int) $site->blog_id; ?>">
@@ -548,9 +546,9 @@ class Admin {
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="wput-add-site-role"><?php esc_html_e( 'Role', 'user-teams' ); ?></label></th>
+						<th scope="row"><label for="user-team-add-site-role"><?php esc_html_e( 'Role', 'user-teams' ); ?></label></th>
 						<td>
-							<select name="role" id="wput-add-site-role">
+							<select name="role" id="user-team-add-site-role">
 								<option value=""><?php esc_html_e( 'Inherit Global Role', 'user-teams' ); ?></option>
 								<?php foreach ( $role_names as $slug => $name ) : ?>
 									<option value="<?php echo esc_attr( $slug ); ?>">
@@ -561,7 +559,7 @@ class Admin {
 						</td>
 					</tr>
 				</table>
-				<?php submit_button( __( 'Add Site', 'user-teams' ), 'secondary', 'wput_add_site_submit' ); ?>
+				<?php submit_button( __( 'Add Site', 'user-teams' ), 'secondary', 'user_teams_add_site_submit' ); ?>
 			</form>
 		<?php endif; ?>
 		<?php
@@ -640,7 +638,7 @@ class Admin {
 			<tr>
 				<th scope="row"><?php esc_html_e( 'Teams', 'user-teams' ); ?></th>
 				<td>
-					<?php wp_nonce_field( self::USER_NONCE, 'wput_user_nonce' ); ?>
+					<?php wp_nonce_field( self::USER_NONCE, 'user_teams_user_nonce' ); ?>
 					<?php if ( empty( $teams ) ) : ?>
 						<p><em><?php esc_html_e( 'No teams have been defined yet.', 'user-teams' ); ?></em></p>
 					<?php else : ?>
@@ -648,7 +646,7 @@ class Admin {
 							<legend class="screen-reader-text"><?php esc_html_e( 'User Teams', 'user-teams' ); ?></legend>
 							<?php foreach ( $teams as $team ) : ?>
 								<label style="display:block;margin-bottom:0.25em;">
-									<input type="checkbox" name="wput_teams[]" value="<?php echo (int) $team['id']; ?>" <?php checked( in_array( $team['id'], $user_team_ids, true ) ); ?> />
+									<input type="checkbox" name="user_teams_teams[]" value="<?php echo (int) $team['id']; ?>" <?php checked( in_array( $team['id'], $user_team_ids, true ) ); ?> />
 									<strong><?php echo esc_html( $team['name'] ); ?></strong>
 									<?php if ( $team['role'] && isset( $role_names[ $team['role'] ] ) ) : ?>
 										<span style="color:#646970;">— <?php echo esc_html( translate_user_role( $role_names[ $team['role'] ] ) ); ?></span>
@@ -688,7 +686,7 @@ class Admin {
 		if ( ! $screen || 'users' !== $screen->base ) {
 			return;
 		}
-		$notice = isset( $_GET['wput_notice'] ) ? sanitize_key( wp_unslash( $_GET['wput_notice'] ) ) : '';
+		$notice = isset( $_GET['user_teams_notice'] ) ? sanitize_key( wp_unslash( $_GET['user_teams_notice'] ) ) : '';
 		$map    = array(
 			'site-removed'       => array( 'success', __( 'Team removed from this site.', 'user-teams' ) ),
 			'site-remove-failed' => array( 'error',   __( 'The team could not be removed from this site.', 'user-teams' ) ),
@@ -708,12 +706,12 @@ class Admin {
 		if ( ! $screen || 'user' !== $screen->base ) {
 			return;
 		}
-		if ( empty( $_GET['wput_notice'] ) ) {
+		if ( empty( $_GET['user_teams_notice'] ) ) {
 			return;
 		}
 
-		$notice = sanitize_key( wp_unslash( $_GET['wput_notice'] ) );
-		$detail = sanitize_text_field( wp_unslash( $_GET['wput_detail'] ?? '' ) );
+		$notice = sanitize_key( wp_unslash( $_GET['user_teams_notice'] ) );
+		$detail = sanitize_text_field( wp_unslash( $_GET['user_teams_detail'] ?? '' ) );
 
 		$map = array(
 			'attach-saved'  => array(
@@ -775,20 +773,20 @@ class Admin {
 
 		$role_names = wp_roles()->get_names();
 		?>
-		<div class="wput-add-team-to-site" data-wput-relocate-below="form#createuser,form#adduser" style="border-top:1px solid #dcdcde;margin-top:2em;padding-top:1em;">
+		<div class="user-team-add-team-to-site" data-user-team-relocate-below="form#createuser,form#adduser" style="border-top:1px solid #dcdcde;margin-top:2em;padding-top:1em;">
 			<h2><?php esc_html_e( 'Add a Team to This Site', 'user-teams' ); ?></h2>
 			<p class="description">
 				<?php esc_html_e( 'Grant every member of an existing team access to this site, instead of inviting one user at a time.', 'user-teams' ); ?>
 			</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<input type="hidden" name="action" value="wp_user_teams_attach_site" />
+				<input type="hidden" name="action" value="user_teams_attach_site" />
 				<input type="hidden" name="blog_id" value="<?php echo (int) $blog_id; ?>" />
 				<?php wp_nonce_field( self::NONCE_ACTION ); ?>
 				<table class="form-table" role="presentation">
 					<tr>
-						<th scope="row"><label for="wput-attach-team"><?php esc_html_e( 'Team', 'user-teams' ); ?></label></th>
+						<th scope="row"><label for="user-team-attach-team"><?php esc_html_e( 'Team', 'user-teams' ); ?></label></th>
 						<td>
-							<select name="team_id" id="wput-attach-team" required>
+							<select name="team_id" id="user-team-attach-team" required>
 								<option value=""><?php esc_html_e( '— Select a team —', 'user-teams' ); ?></option>
 								<?php foreach ( $available as $team ) : ?>
 									<option value="<?php echo (int) $team['id']; ?>"><?php echo esc_html( $team['name'] ); ?></option>
@@ -797,9 +795,9 @@ class Admin {
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="wput-attach-role"><?php esc_html_e( 'Role on this site', 'user-teams' ); ?></label></th>
+						<th scope="row"><label for="user-team-attach-role"><?php esc_html_e( 'Role on this site', 'user-teams' ); ?></label></th>
 						<td>
-							<select name="role" id="wput-attach-role">
+							<select name="role" id="user-team-attach-role">
 								<?php foreach ( array_keys( $role_names ) as $slug ) : ?>
 									<option value="<?php echo esc_attr( $slug ); ?>"<?php echo 'subscriber' === $slug ? ' selected' : ''; ?>>
 										<?php echo esc_html( translate_user_role( $role_names[ $slug ] ) ); ?>
@@ -809,7 +807,7 @@ class Admin {
 						</td>
 					</tr>
 				</table>
-				<?php submit_button( __( 'Add Team', 'user-teams' ), 'primary', 'wput_attach_submit' ); ?>
+				<?php submit_button( __( 'Add Team', 'user-teams' ), 'primary', 'user_teams_attach_submit' ); ?>
 			</form>
 		</div>
 		<?php
@@ -861,7 +859,7 @@ class Admin {
 			wp_safe_redirect( $this->page_url( array( 'action' => 'edit', 'team_id' => $team_id, 'notice' => $notice ) ) );
 		} else {
 			wp_safe_redirect( add_query_arg(
-				'wput_notice',
+				'user_teams_notice',
 				'saved' === $notice ? 'site-removed' : 'site-remove-failed',
 				admin_url( 'users.php' )
 			) );
@@ -893,10 +891,10 @@ class Admin {
 
 	private function redirect_to_user_new( $notice, $detail = '' ) {
 		$args = array(
-			'wput_notice' => $notice,
+			'user_teams_notice' => $notice,
 		);
 		if ( $detail ) {
-			$args['wput_detail'] = rawurlencode( $detail );
+			$args['user_teams_detail'] = rawurlencode( $detail );
 		}
 		wp_safe_redirect( add_query_arg( $args, admin_url( 'user-new.php' ) ) );
 		exit;
@@ -906,12 +904,12 @@ class Admin {
 		if ( ! current_user_can( 'manage_network_users' ) ) {
 			return;
 		}
-		if ( empty( $_POST['wput_user_nonce'] ) || ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['wput_user_nonce'] ) ), self::USER_NONCE ) ) {
+		if ( empty( $_POST['user_teams_user_nonce'] ) || ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['user_teams_user_nonce'] ) ), self::USER_NONCE ) ) {
 			return;
 		}
 
-		$submitted = ( isset( $_POST['wput_teams'] ) && is_array( $_POST['wput_teams'] ) )
-			? array_map( 'intval', wp_unslash( $_POST['wput_teams'] ) )
+		$submitted = ( isset( $_POST['user_teams_teams'] ) && is_array( $_POST['user_teams_teams'] ) )
+			? array_map( 'intval', wp_unslash( $_POST['user_teams_teams'] ) )
 			: array();
 
 		Plugin::set_user_teams( $user_id, $submitted );
@@ -1043,7 +1041,7 @@ class Admin {
 
 			$url   = add_query_arg( 'team', (int) $team['id'], $base_url );
 			$class = ( $current === (int) $team['id'] ) ? ' class="current" aria-current="page"' : '';
-			$views[ 'wput-team-' . $team['id'] ] = sprintf(
+			$views[ 'user-team-team-' . $team['id'] ] = sprintf(
 				'<a href="%1$s"%2$s>%3$s <span class="count">(%4$s)</span></a>',
 				esc_url( $url ),
 				$class,

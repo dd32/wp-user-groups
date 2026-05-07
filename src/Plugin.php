@@ -10,15 +10,13 @@
  *   - display_name   = team name
  *   - user_login     = `_team_{slug}` (prefixed to avoid collisions)
  *   - user_pass      = random / unknown (login is blocked anyway)
- *   - wput_is_team   = '1'            (marker meta)
- *   - wput_slug      = slug           (human-friendly identifier)
- *   - wput_global_role = role_slug    (role granted network-wide)
+ *   - user_teams_is_team   = '1'            (marker meta)
+ *   - user_teams_slug      = slug           (human-friendly identifier)
+ *   - user_teams_global_role = role_slug    (role granted network-wide)
  *   - wp_{blog_id}_capabilities       (per-site role grants, native)
  */
 
 namespace dd32\WordPress\UserTeams;
-
-defined( 'ABSPATH' ) || exit;
 
 class Plugin {
 
@@ -29,11 +27,11 @@ class Plugin {
 	use Traits\Hiding;
 	use Traits\BlogsFilter;
 
-	const IS_TEAM_META_KEY   = 'wput_is_team';
-	const SLUG_META_KEY      = 'wput_slug';
-	const GLOBAL_ROLE_META   = 'wput_global_role';
-	const USER_META_KEY      = 'wp_user_teams';
-	const QUERY_INCLUDE_FLAG = 'wput_include_teams';
+	const IS_TEAM_META_KEY   = 'user_teams_is_team';
+	const SLUG_META_KEY      = 'user_teams_slug';
+	const GLOBAL_ROLE_META   = 'user_teams_global_role';
+	const USER_META_KEY      = 'user_teams';
+	const QUERY_INCLUDE_FLAG = 'user_teams_include_teams';
 	const LOGIN_PREFIX       = '_team_';
 
 	private static $instance;

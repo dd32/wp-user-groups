@@ -96,7 +96,7 @@ trait Crud {
 		 * @param string   $op      `'create'` or `'update'`.
 		 */
 		$data = (array) apply_filters(
-			'wput_team_save_data',
+			'user_teams_team_save_data',
 			array( 'name' => $name, 'slug' => $slug, 'role' => $role ),
 			null,
 			'create'
@@ -148,7 +148,7 @@ trait Crud {
 		}
 
 		/** This filter is documented in src/Traits/Crud.php */
-		$data = (array) apply_filters( 'wput_team_save_data', $data, $team_id, 'update' );
+		$data = (array) apply_filters( 'user_teams_team_save_data', $data, $team_id, 'update' );
 
 		if ( isset( $data['name'] ) ) {
 			$name = sanitize_text_field( $data['name'] );

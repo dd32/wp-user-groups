@@ -1,8 +1,8 @@
 ( function () {
 	document.addEventListener( 'DOMContentLoaded', function () {
-		var el = document.querySelector( '.wput-add-team-to-site' );
+		var el = document.querySelector( '.user-team-add-team-to-site' );
 		if ( ! el ) { return; }
-		var selectors = ( el.getAttribute( 'data-wput-relocate-below' ) || '' ).split( ',' );
+		var selectors = ( el.getAttribute( 'data-user-team-relocate-below' ) || '' ).split( ',' );
 		var anchor = null;
 		for ( var i = 0; i < selectors.length; i++ ) {
 			var candidates = document.querySelectorAll( selectors[ i ].trim() );
