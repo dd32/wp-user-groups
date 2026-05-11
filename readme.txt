@@ -4,7 +4,7 @@ Tags: users, roles, multisite, team, permissions
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.2.4
+Stable tag: 0.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -94,22 +94,3 @@ On GitHub at [dd32/wp-user-teams](https://github.com/dd32/wp-user-teams). That's
 
 File it on [GitHub](https://github.com/dd32/wp-user-teams/issues). General support questions belong in the [WordPress.org Support Forums](https://wordpress.org/support/plugin/user-teams/).
 
-== Changelog ==
-
-= 0.2.4 =
-* Namespace the bootstrap file under `dd32\WordPress\UserTeams`; replace the global `USER_TEAMS_FILE` / `USER_TEAMS_PATH` constants with namespaced `PLUGIN_FILE` / `PLUGIN_DIR`.
-* Standardise on `user_teams_` (PHP) and `user-team-` (CSS/DOM) prefixes; drop the parallel `wput`, `wp_user_teams`, and `wpUserTeams` prefixes.
-
-= 0.2.3 =
-* No code changes; version bumped to resubmit 0.2.2 build to the WordPress.org review queue.
-
-= 0.2.2 =
-* Move admin assets out of inline `<style>` / `<script>` tags into proper enqueued files.
-
-= 0.2.1 =
-* Rework the public site-grant API: `add_team_to_site()` / `remove_team_from_site()` replace the bulk `set_team_sites()`.
-* Rename `scripts/` dev helpers to `env/`.
-* Drop the old <template>-injection user-list renderer and other dead code.
-
-= 0.1.0 =
-* Initial release.
