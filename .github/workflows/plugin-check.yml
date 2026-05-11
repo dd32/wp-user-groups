@@ -24,7 +24,22 @@ jobs:
         uses: WordPress/plugin-check-action@v1
         with:
           slug: user-teams
-          exclude-directories: env
+          exclude-directories: |
+            env
+            tests
+            vendor
+            node_modules
+            .github
+          exclude-files: |
+            .wp-env.json
+            .wp-env.override.json
+            phpunit.xml.dist
+            composer.json
+            composer.lock
+            package.json
+            package-lock.json
+            README.md
+            .gitignore
 
       # We deliberately don't escape WordPress.org-supplied translation strings
       # (see issue #2). plugin-check can't downgrade individual sniffs to
