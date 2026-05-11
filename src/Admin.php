@@ -121,8 +121,8 @@ class Admin {
 			self::NONCE_ACTION
 		);
 		return array(
-			'user-team-edit-team'        => '<a href="' . esc_url( $edit_url ) . '">' . esc_html__( 'Edit team', 'user-teams' ) . '</a>',
-			'user-team-remove-from-site' => '<a href="' . esc_url( $remove_url ) . '" class="submitdelete" onclick="return confirm(\'' . esc_js( __( 'Remove this team from the site? Members lose the team-granted role here.', 'user-teams' ) ) . '\');">' . esc_html__( 'Remove from site', 'user-teams' ) . '</a>',
+			'user-team-edit-team'        => '<a href="' . esc_url( $edit_url ) . '">' . __( 'Edit team', 'user-teams' ) . '</a>',
+			'user-team-remove-from-site' => '<a href="' . esc_url( $remove_url ) . '" class="submitdelete" onclick="return confirm(\'' . esc_js( __( 'Remove this team from the site? Members lose the team-granted role here.', 'user-teams' ) ) . '\');">' . __( 'Remove from site', 'user-teams' ) . '</a>',
 		);
 	}
 
@@ -233,7 +233,7 @@ class Admin {
 
 	public function render_page() {
 		if ( ! current_user_can( 'manage_network_users' ) ) {
-			wp_die( esc_html__( 'You do not have permission to access this page.', 'user-teams' ) );
+			wp_die( __( 'You do not have permission to access this page.', 'user-teams' ) );
 		}
 
 		$action = sanitize_key( wp_unslash( $_GET['action'] ?? 'list' ) );
@@ -259,27 +259,27 @@ class Admin {
 		$new_url = $this->page_url( array( 'action' => 'new' ) );
 		?>
 		<div class="wrap">
-			<h1 class="wp-heading-inline"><?php esc_html_e( 'User Teams', 'user-teams' ); ?></h1>
-			<a href="<?php echo esc_url( $new_url ); ?>" class="page-title-action"><?php esc_html_e( 'Add New', 'user-teams' ); ?></a>
+			<h1 class="wp-heading-inline"><?php _e( 'User Teams', 'user-teams' ); ?></h1>
+			<a href="<?php echo esc_url( $new_url ); ?>" class="page-title-action"><?php _e( 'Add New', 'user-teams' ); ?></a>
 			<hr class="wp-header-end">
 
 			<?php $this->render_admin_notices(); ?>
 
 			<p class="description">
-				<?php esc_html_e( "Create teams that grant a WordPress role to every member. Users gain the team's role in addition to any role they already hold. Remove a user from a team and the access disappears immediately.", 'user-teams' ); ?>
+				<?php _e( "Create teams that grant a WordPress role to every member. Users gain the team's role in addition to any role they already hold. Remove a user from a team and the access disappears immediately.", 'user-teams' ); ?>
 			</p>
 
 			<?php if ( empty( $teams ) ) : ?>
-				<p><em><?php esc_html_e( 'No teams yet. Create one to start organising user access.', 'user-teams' ); ?></em></p>
+				<p><em><?php _e( 'No teams yet. Create one to start organising user access.', 'user-teams' ); ?></em></p>
 			<?php else : ?>
 			<table class="wp-list-table widefat fixed striped">
 				<thead>
 					<tr>
-						<th scope="col"><?php esc_html_e( 'Name', 'user-teams' ); ?></th>
-						<th scope="col"><?php esc_html_e( 'Slug', 'user-teams' ); ?></th>
-						<th scope="col"><?php esc_html_e( 'Role', 'user-teams' ); ?></th>
-						<th scope="col"><?php esc_html_e( 'Sites', 'user-teams' ); ?></th>
-						<th scope="col"><?php esc_html_e( 'Members', 'user-teams' ); ?></th>
+						<th scope="col"><?php _e( 'Name', 'user-teams' ); ?></th>
+						<th scope="col"><?php _e( 'Slug', 'user-teams' ); ?></th>
+						<th scope="col"><?php _e( 'Role', 'user-teams' ); ?></th>
+						<th scope="col"><?php _e( 'Sites', 'user-teams' ); ?></th>
+						<th scope="col"><?php _e( 'Members', 'user-teams' ); ?></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -304,8 +304,8 @@ class Admin {
 						<td>
 							<strong><a href="<?php echo esc_url( $edit_url ); ?>"><?php echo esc_html( $team['name'] ); ?></a></strong>
 							<div class="row-actions">
-								<span class="edit"><a href="<?php echo esc_url( $edit_url ); ?>"><?php esc_html_e( 'Edit', 'user-teams' ); ?></a> | </span>
-								<span class="delete"><a href="<?php echo esc_url( $delete_url ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Delete this team? Members will lose the role it grants.', 'user-teams' ) ); ?>');" class="submitdelete"><?php esc_html_e( 'Delete', 'user-teams' ); ?></a></span>
+								<span class="edit"><a href="<?php echo esc_url( $edit_url ); ?>"><?php _e( 'Edit', 'user-teams' ); ?></a> | </span>
+								<span class="delete"><a href="<?php echo esc_url( $delete_url ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Delete this team? Members will lose the role it grants.', 'user-teams' ) ); ?>');" class="submitdelete"><?php _e( 'Delete', 'user-teams' ); ?></a></span>
 							</div>
 						</td>
 						<td><code><?php echo esc_html( $team['slug'] ); ?></code></td>
@@ -326,7 +326,7 @@ class Admin {
 							$has_global = ! empty( $team['role'] );
 							$explicit   = count( $sites );
 							if ( $has_global && 0 === $explicit ) {
-								esc_html_e( 'All sites (via Global Role)', 'user-teams' );
+								_e( 'All sites (via Global Role)', 'user-teams' );
 							} elseif ( $has_global && $explicit > 0 ) {
 								echo esc_html( sprintf(
 									/* translators: %s: number of per-site overrides */
@@ -365,7 +365,7 @@ class Admin {
 		if ( 'edit' === $action ) {
 			$team = Plugin::get_team( $team_id );
 			if ( ! $team ) {
-				wp_die( esc_html__( 'Team not found.', 'user-teams' ) );
+				wp_die( __( 'Team not found.', 'user-teams' ) );
 			}
 		}
 
@@ -396,24 +396,24 @@ class Admin {
 
 				<table class="form-table" role="presentation">
 					<tr>
-						<th scope="row"><label for="user-team-name"><?php esc_html_e( 'Name', 'user-teams' ); ?></label></th>
+						<th scope="row"><label for="user-team-name"><?php _e( 'Name', 'user-teams' ); ?></label></th>
 						<td>
 							<input name="name" type="text" id="user-team-name" value="<?php echo esc_attr( $team ? $team['name'] : '' ); ?>" class="regular-text" required />
-							<p class="description"><?php esc_html_e( 'Display name, e.g. "WordPress Meta Team".', 'user-teams' ); ?></p>
+							<p class="description"><?php _e( 'Display name, e.g. "WordPress Meta Team".', 'user-teams' ); ?></p>
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="user-team-slug"><?php esc_html_e( 'Slug', 'user-teams' ); ?></label></th>
+						<th scope="row"><label for="user-team-slug"><?php _e( 'Slug', 'user-teams' ); ?></label></th>
 						<td>
 							<input name="slug" type="text" id="user-team-slug" value="<?php echo esc_attr( $team ? $team['slug'] : '' ); ?>" class="regular-text" />
-							<p class="description"><?php esc_html_e( 'Optional. Auto-generated from the name if left blank.', 'user-teams' ); ?></p>
+							<p class="description"><?php _e( 'Optional. Auto-generated from the name if left blank.', 'user-teams' ); ?></p>
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="user-team-role"><?php esc_html_e( 'Global Role', 'user-teams' ); ?></label></th>
+						<th scope="row"><label for="user-team-role"><?php _e( 'Global Role', 'user-teams' ); ?></label></th>
 						<td>
 							<select name="role" id="user-team-role">
-								<option value="" <?php selected( '', $current_role ); ?>><?php esc_html_e( '— Not set —', 'user-teams' ); ?></option>
+								<option value="" <?php selected( '', $current_role ); ?>><?php _e( '— Not set —', 'user-teams' ); ?></option>
 								<?php
 								foreach ( wp_roles()->roles as $slug => $data ) {
 									printf(
@@ -425,13 +425,13 @@ class Admin {
 								}
 								?>
 							</select>
-							<p class="description"><?php esc_html_e( 'When set, this role is granted for this team on all sites.', 'user-teams' ); ?></p>
+							<p class="description"><?php _e( 'When set, this role is granted for this team on all sites.', 'user-teams' ); ?></p>
 						</td>
 					</tr>
 				</table>
 
 				<?php submit_button( $team ? __( 'Update Team', 'user-teams' ) : __( 'Create Team', 'user-teams' ) ); ?>
-				<a href="<?php echo esc_url( $back_url ); ?>" class="button button-secondary"><?php esc_html_e( 'Back to teams', 'user-teams' ); ?></a>
+				<a href="<?php echo esc_url( $back_url ); ?>" class="button button-secondary"><?php _e( 'Back to teams', 'user-teams' ); ?></a>
 			</form>
 
 			<?php if ( $team ) : ?>
@@ -468,19 +468,19 @@ class Admin {
 		}
 
 		?>
-		<h2 style="margin-top:2em;"><?php esc_html_e( 'Sites with role grants', 'user-teams' ); ?></h2>
+		<h2 style="margin-top:2em;"><?php _e( 'Sites with role grants', 'user-teams' ); ?></h2>
 		<p class="description">
-			<?php esc_html_e( 'Specific sites this team is granted on, with the role each member receives there.', 'user-teams' ); ?>
+			<?php _e( 'Specific sites this team is granted on, with the role each member receives there.', 'user-teams' ); ?>
 		</p>
 
 		<?php if ( empty( $site_roles ) ) : ?>
-			<p><em><?php esc_html_e( 'No per-site grants. Use the form below to add one, or set a Global Role above to cover every site.', 'user-teams' ); ?></em></p>
+			<p><em><?php _e( 'No per-site grants. Use the form below to add one, or set a Global Role above to cover every site.', 'user-teams' ); ?></em></p>
 		<?php else : ?>
 			<table class="wp-list-table widefat fixed striped" style="max-width:720px;">
 				<thead>
 					<tr>
-						<th scope="col"><?php esc_html_e( 'Site', 'user-teams' ); ?></th>
-						<th scope="col"><?php esc_html_e( 'Role', 'user-teams' ); ?></th>
+						<th scope="col"><?php _e( 'Site', 'user-teams' ); ?></th>
+						<th scope="col"><?php _e( 'Role', 'user-teams' ); ?></th>
 						<th scope="col" style="width:80px;"></th>
 					</tr>
 				</thead>
@@ -515,7 +515,7 @@ class Admin {
 							</td>
 							<td>
 								<a href="<?php echo esc_url( $remove_url ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Remove this site from the team?', 'user-teams' ) ); ?>');" class="submitdelete">
-									<?php esc_html_e( 'Remove', 'user-teams' ); ?>
+									<?php _e( 'Remove', 'user-teams' ); ?>
 								</a>
 							</td>
 						</tr>
@@ -525,17 +525,17 @@ class Admin {
 		<?php endif; ?>
 
 		<?php if ( ! empty( $addable ) ) : ?>
-			<h3 style="margin-top:1.5em;"><?php esc_html_e( 'Add a site', 'user-teams' ); ?></h3>
+			<h3 style="margin-top:1.5em;"><?php _e( 'Add a site', 'user-teams' ); ?></h3>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="max-width:720px;">
 				<input type="hidden" name="action" value="user_teams_add_site" />
 				<input type="hidden" name="team_id" value="<?php echo (int) $team['id']; ?>" />
 				<?php wp_nonce_field( self::NONCE_ACTION ); ?>
 				<table class="form-table" role="presentation">
 					<tr>
-						<th scope="row"><label for="user-team-add-site-blog"><?php esc_html_e( 'Site', 'user-teams' ); ?></label></th>
+						<th scope="row"><label for="user-team-add-site-blog"><?php _e( 'Site', 'user-teams' ); ?></label></th>
 						<td>
 							<select name="blog_id" id="user-team-add-site-blog" required>
-								<option value=""><?php esc_html_e( '— Select a site —', 'user-teams' ); ?></option>
+								<option value=""><?php _e( '— Select a site —', 'user-teams' ); ?></option>
 								<?php foreach ( $addable as $site ) : ?>
 									<option value="<?php echo (int) $site->blog_id; ?>">
 										<?php echo esc_html( $site->blogname ); ?>
@@ -546,10 +546,10 @@ class Admin {
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="user-team-add-site-role"><?php esc_html_e( 'Role', 'user-teams' ); ?></label></th>
+						<th scope="row"><label for="user-team-add-site-role"><?php _e( 'Role', 'user-teams' ); ?></label></th>
 						<td>
 							<select name="role" id="user-team-add-site-role">
-								<option value=""><?php esc_html_e( 'Inherit Global Role', 'user-teams' ); ?></option>
+								<option value=""><?php _e( 'Inherit Global Role', 'user-teams' ); ?></option>
 								<?php foreach ( $role_names as $slug => $name ) : ?>
 									<option value="<?php echo esc_attr( $slug ); ?>">
 										<?php echo esc_html( translate_user_role( $name ) ); ?>
@@ -573,7 +573,7 @@ class Admin {
 		check_admin_referer( self::NONCE_ACTION );
 
 		if ( ! current_user_can( 'manage_network_users' ) ) {
-			wp_die( esc_html__( 'You do not have permission to manage teams.', 'user-teams' ) );
+			wp_die( __( 'You do not have permission to manage teams.', 'user-teams' ) );
 		}
 
 		$name    = sanitize_text_field( wp_unslash( $_POST['name'] ?? '' ) );
@@ -608,7 +608,7 @@ class Admin {
 		check_admin_referer( self::NONCE_ACTION );
 
 		if ( ! current_user_can( 'manage_network_users' ) ) {
-			wp_die( esc_html__( 'You do not have permission to manage teams.', 'user-teams' ) );
+			wp_die( __( 'You do not have permission to manage teams.', 'user-teams' ) );
 		}
 
 		$team_id = (int) ( $_GET['team_id'] ?? 0 );
@@ -633,17 +633,17 @@ class Admin {
 		$user_team_ids = Plugin::get_user_team_ids( $user->ID );
 		$role_names    = wp_roles()->get_names();
 		?>
-		<h2><?php esc_html_e( 'User Teams', 'user-teams' ); ?></h2>
+		<h2><?php _e( 'User Teams', 'user-teams' ); ?></h2>
 		<table class="form-table" role="presentation">
 			<tr>
-				<th scope="row"><?php esc_html_e( 'Teams', 'user-teams' ); ?></th>
+				<th scope="row"><?php _e( 'Teams', 'user-teams' ); ?></th>
 				<td>
 					<?php wp_nonce_field( self::USER_NONCE, 'user_teams_user_nonce' ); ?>
 					<?php if ( empty( $teams ) ) : ?>
-						<p><em><?php esc_html_e( 'No teams have been defined yet.', 'user-teams' ); ?></em></p>
+						<p><em><?php _e( 'No teams have been defined yet.', 'user-teams' ); ?></em></p>
 					<?php else : ?>
 						<fieldset>
-							<legend class="screen-reader-text"><?php esc_html_e( 'User Teams', 'user-teams' ); ?></legend>
+							<legend class="screen-reader-text"><?php _e( 'User Teams', 'user-teams' ); ?></legend>
 							<?php foreach ( $teams as $team ) : ?>
 								<label style="display:block;margin-bottom:0.25em;">
 									<input type="checkbox" name="user_teams_teams[]" value="<?php echo (int) $team['id']; ?>" <?php checked( in_array( $team['id'], $user_team_ids, true ) ); ?> />
@@ -654,7 +654,7 @@ class Admin {
 								</label>
 							<?php endforeach; ?>
 						</fieldset>
-						<p class="description"><?php esc_html_e( "Membership grants the team's role in addition to the user's existing role.", 'user-teams' ); ?></p>
+						<p class="description"><?php _e( "Membership grants the team's role in addition to the user's existing role.", 'user-teams' ); ?></p>
 					<?php endif; ?>
 				</td>
 			</tr>
@@ -774,9 +774,9 @@ class Admin {
 		$role_names = wp_roles()->get_names();
 		?>
 		<div class="user-team-add-team-to-site" data-user-team-relocate-below="form#createuser,form#adduser" style="border-top:1px solid #dcdcde;margin-top:2em;padding-top:1em;">
-			<h2><?php esc_html_e( 'Add a Team to This Site', 'user-teams' ); ?></h2>
+			<h2><?php _e( 'Add a Team to This Site', 'user-teams' ); ?></h2>
 			<p class="description">
-				<?php esc_html_e( 'Grant every member of an existing team access to this site, instead of inviting one user at a time.', 'user-teams' ); ?>
+				<?php _e( 'Grant every member of an existing team access to this site, instead of inviting one user at a time.', 'user-teams' ); ?>
 			</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="user_teams_attach_site" />
@@ -784,10 +784,10 @@ class Admin {
 				<?php wp_nonce_field( self::NONCE_ACTION ); ?>
 				<table class="form-table" role="presentation">
 					<tr>
-						<th scope="row"><label for="user-team-attach-team"><?php esc_html_e( 'Team', 'user-teams' ); ?></label></th>
+						<th scope="row"><label for="user-team-attach-team"><?php _e( 'Team', 'user-teams' ); ?></label></th>
 						<td>
 							<select name="team_id" id="user-team-attach-team" required>
-								<option value=""><?php esc_html_e( '— Select a team —', 'user-teams' ); ?></option>
+								<option value=""><?php _e( '— Select a team —', 'user-teams' ); ?></option>
 								<?php foreach ( $available as $team ) : ?>
 									<option value="<?php echo (int) $team['id']; ?>"><?php echo esc_html( $team['name'] ); ?></option>
 								<?php endforeach; ?>
@@ -795,7 +795,7 @@ class Admin {
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="user-team-attach-role"><?php esc_html_e( 'Role on this site', 'user-teams' ); ?></label></th>
+						<th scope="row"><label for="user-team-attach-role"><?php _e( 'Role on this site', 'user-teams' ); ?></label></th>
 						<td>
 							<select name="role" id="user-team-attach-role">
 								<?php foreach ( array_keys( $role_names ) as $slug ) : ?>
@@ -820,7 +820,7 @@ class Admin {
 		check_admin_referer( self::NONCE_ACTION );
 
 		if ( ! current_user_can( 'manage_network_users' ) ) {
-			wp_die( esc_html__( 'You do not have permission to manage teams.', 'user-teams' ) );
+			wp_die( __( 'You do not have permission to manage teams.', 'user-teams' ) );
 		}
 
 		$team_id = (int) ( $_POST['team_id'] ?? 0 );
@@ -846,7 +846,7 @@ class Admin {
 		check_admin_referer( self::NONCE_ACTION );
 
 		if ( ! current_user_can( 'manage_network_users' ) ) {
-			wp_die( esc_html__( 'You do not have permission to manage teams.', 'user-teams' ) );
+			wp_die( __( 'You do not have permission to manage teams.', 'user-teams' ) );
 		}
 
 		$team_id  = (int) ( $_GET['team_id'] ?? 0 );
@@ -877,7 +877,7 @@ class Admin {
 		// Anyone who can manage users on the target site may attach a
 		// team to it. Super admins naturally satisfy this everywhere.
 		if ( ! current_user_can_for_site( $blog_id, 'promote_users' ) ) {
-			wp_die( esc_html__( 'You do not have permission to manage users on this site.', 'user-teams' ) );
+			wp_die( __( 'You do not have permission to manage users on this site.', 'user-teams' ) );
 		}
 
 		$team = Plugin::get_team( $team_id );
