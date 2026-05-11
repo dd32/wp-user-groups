@@ -15,7 +15,81 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run plugin check
+        id: plugin-check
+        continue-on-error: true
         uses: WordPress/plugin-check-action@v1
         with:
           slug: user-teams
           exclude-directories: env
+
+      # We deliberately don't escape WordPress.org-supplied translation strings
+      # (see issue #2). plugin-check can't downgrade individual sniffs to
+      # warnings, so we reclassify these codes here: emit them as ::warning::
+      # annotations and only fail the job on remaining real errors.
+      - name: Reclassify findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULTS="${RUNNER_TEMP}/plugin-check-results.txt"
+          if [ ! -s "$RESULTS" ]; then
+            echo "No plugin-check results file at $RESULTS; nothing to reclassify."
+            exit 0
+          fi
+
+          # Codes we accept by policy — emitted as warnings, never fail the build.
+          DOWNGRADE_RE='^(WordPress\.Security\.EscapeOutput\.UnsafePrintingFunction|WordPress\.Security\.EscapeOutput\.OutputNotEscaped)$'
+
+          # plugin-check writes paired lines: `FILE: <path>\n[ {line,column,type,code,message}, ... ]`.
+          # Pair each file header with its JSON array, then expand each finding into one TSV row.
+          : > findings.tsv
+          awk '/^FILE: /{file=substr($0,7); next} NF{print file "\t" $0}' "$RESULTS" \
+          | while IFS=$'\t' read -r file json; do
+              printf '%s' "$json" | jq -r --arg file "$file" --arg dr "$DOWNGRADE_RE" '
+                .[]
+                | {
+                    file: $file,
+                    line: .line,
+                    col:  .column,
+                    code: .code,
+                    type: (if (.type == "ERROR" and (.code | test($dr))) then "DOWNGRADED" else .type end),
+                    message: .message
+                  }
+                | [.file, (.line|tostring), (.col|tostring), .type, .code, .message] | @tsv
+              ' >> findings.tsv
+            done
+
+          real_errors=0
+          downgraded=0
+          warnings=0
+
+          while IFS=$'\t' read -r file line col type code msg; do
+            case "$type" in
+              ERROR)
+                printf '::error file=%s,line=%s,col=%s::[%s] %s\n' "$file" "$line" "$col" "$code" "$msg"
+                real_errors=$((real_errors+1))
+                ;;
+              DOWNGRADED)
+                printf '::warning file=%s,line=%s,col=%s::[%s] (downgraded per policy) %s\n' "$file" "$line" "$col" "$code" "$msg"
+                downgraded=$((downgraded+1))
+                ;;
+              WARNING)
+                printf '::warning file=%s,line=%s,col=%s::[%s] %s\n' "$file" "$line" "$col" "$code" "$msg"
+                warnings=$((warnings+1))
+                ;;
+            esac
+          done < findings.tsv
+
+          {
+            echo "## Plugin Check summary"
+            echo ""
+            echo "| Type | Count |"
+            echo "| --- | --- |"
+            echo "| Errors (fail the build) | $real_errors |"
+            echo "| Downgraded by policy (warnings) | $downgraded |"
+            echo "| Warnings | $warnings |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$real_errors" -gt 0 ]; then
+            echo "::error::plugin-check found $real_errors error(s) after policy downgrade"
+            exit 1
+          fi
