@@ -37,7 +37,9 @@ jobs:
           fi
 
           # Codes we accept by policy — emitted as warnings, never fail the build.
-          DOWNGRADE_RE='^(WordPress\.Security\.EscapeOutput\.UnsafePrintingFunction|WordPress\.Security\.EscapeOutput\.OutputNotEscaped)$'
+          #   *EscapeOutput.UnsafePrintingFunction / *OutputNotEscaped: we trust w.org translations (issue #2).
+          #   missing_direct_file_access_protection: namespaced bootstrap + autoloader; no top-level side-effect files.
+          DOWNGRADE_RE='^(WordPress\.Security\.EscapeOutput\.UnsafePrintingFunction|WordPress\.Security\.EscapeOutput\.OutputNotEscaped|missing_direct_file_access_protection)$'
 
           # plugin-check writes paired lines: `FILE: <path>\n[ {line,column,type,code,message}, ... ]`.
           # Pair each file header with its JSON array, then expand each finding into one TSV row.
