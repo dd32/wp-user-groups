@@ -16,3 +16,6 @@ jobs:
 
       - name: Run plugin check
         uses: WordPress/plugin-check-action@v1
+        with:
+          slug: user-teams
+          exclude-directories: env
