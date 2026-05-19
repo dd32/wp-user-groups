@@ -94,3 +94,7 @@ On GitHub at [dd32/wp-user-teams](https://github.com/dd32/wp-user-teams). That's
 
 File it on [GitHub](https://github.com/dd32/wp-user-teams/issues). General support questions belong in the [WordPress.org Support Forums](https://wordpress.org/support/plugin/user-teams/).
 
+= How do I report a security issue? =
+
+Please report security issues privately via [GitHub Security Advisories](https://github.com/dd32/wp-user-teams/security). Do not file public issues or post to the support forums for security reports.
+

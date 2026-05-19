@@ -151,6 +151,10 @@ The test suite lives in [`tests/`](./tests) and covers:
 - `Test_Admin.php` — integration tests that drive the admin form handlers end-to-end via `$_POST`/`$_REQUEST`.
 - `Test_User_Query.php` — the `pre_user_query` / `views_users` / `get_role_list` hooks that surface teams and team members on `wp-admin/users.php`.
 
+## Reporting security issues
+
+Please report security issues privately via [GitHub Security Advisories](https://github.com/dd32/wp-user-teams/security). Do not file a public issue for security reports.
+
 ## Requirements
 
 - WordPress 6.9+
