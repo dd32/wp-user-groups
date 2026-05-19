@@ -4,7 +4,7 @@ Tags: users, roles, multisite, team, permissions
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.5
+Stable tag: 0.5.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -97,4 +97,12 @@ File it on [GitHub](https://github.com/dd32/wp-user-teams/issues). General suppo
 = How do I report a security issue? =
 
 Please report security issues privately via [GitHub Security Advisories](https://github.com/dd32/wp-user-teams/security). Do not file public issues or post to the support forums for security reports.
+
+== Changelog ==
+
+= 0.5.1 =
+* Security: scope the `pre_user_query` team-member injection to the admin Users screens so a public WP_User_Query (e.g. the REST users collection) can't be broadened by `?team=N`.
+
+= 0.5 =
+* Initial WordPress.org release.
 
