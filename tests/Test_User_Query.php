@@ -20,6 +20,9 @@ class Test_User_Query extends WP_UnitTestCase {
 		Plugin::flush_all_caches();
 		$this->admin = Admin::instance();
 		$_GET        = array();
+		// pre_user_query injection is gated to the admin Users screens.
+		// Individual tests override this to exercise other contexts.
+		set_current_screen( 'users' );
 	}
 
 	public function tear_down() {
@@ -77,6 +80,45 @@ class Test_User_Query extends WP_UnitTestCase {
 		Plugin::add_team_to_site( $tid, $other_blog, 'editor' );
 		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		Plugin::add_user_to_team( $uid, $tid );
+
+		$query = new WP_User_Query( array( 'blog_id' => $blog2, 'fields' => 'ID' ) );
+		$ids   = array_map( 'intval', $query->get_results() );
+
+		$this->assertNotContains( $uid, $ids );
+	}
+
+	public function test_query_does_not_inject_outside_admin_users_screen() {
+		// Public callers — notably the REST users collection — must not
+		// receive the OR-injected team-member IDs, which would otherwise
+		// bypass the endpoint's own visibility predicates (e.g.
+		// `has_published_posts`).
+		$blog2 = self::factory()->blog->create();
+		$tid   = Plugin::create_team( 'PublicLeak', 'public-leak', '' );
+		Plugin::add_team_to_site( $tid, $blog2, 'editor' );
+		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		Plugin::add_user_to_team( $uid, $tid );
+
+		// Simulate a public (front-end / REST) request: no admin context.
+		set_current_screen( 'front' );
+		$_GET['team'] = $tid;
+
+		$query = new WP_User_Query( array( 'blog_id' => $blog2, 'fields' => 'ID' ) );
+		$ids   = array_map( 'intval', $query->get_results() );
+
+		$this->assertNotContains( $uid, $ids, 'team member must not be injected into non-admin user queries' );
+	}
+
+	public function test_query_does_not_inject_on_non_users_admin_screen() {
+		// Even inside wp-admin, the injection should only fire on the
+		// Users list screens — a stray WP_User_Query from a dashboard
+		// widget or other admin page must not receive team members.
+		$blog2 = self::factory()->blog->create();
+		$tid   = Plugin::create_team( 'DashboardLeak', 'dashboard-leak', '' );
+		Plugin::add_team_to_site( $tid, $blog2, 'editor' );
+		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		Plugin::add_user_to_team( $uid, $tid );
+
+		set_current_screen( 'dashboard' );
 
 		$query = new WP_User_Query( array( 'blog_id' => $blog2, 'fields' => 'ID' ) );
 		$ids   = array_map( 'intval', $query->get_results() );

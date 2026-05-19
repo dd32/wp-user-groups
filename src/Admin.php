@@ -1066,6 +1066,18 @@ class Admin {
 	 * @param WP_User_Query $query
 	 */
 	public function include_team_members_in_user_query( $query ) {
+		// `pre_user_query` fires for every WP_User_Query — including the
+		// REST users collection, which is reachable unauthenticated. Scope
+		// the OR-injection to the intended admin Users screens so the raw
+		// `$_GET['team']` read below can't broaden a public query.
+		if ( ! is_admin() ) {
+			return;
+		}
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen || ( 'users' !== $screen->base && 'users-network' !== $screen->base ) ) {
+			return;
+		}
+
 		// Reentrancy guard: this callback runs `get_all_teams()` internally,
 		// which issues its own `WP_User_Query`. Without the guard we'd
 		// recurse back into ourselves.
