@@ -127,4 +127,32 @@ class Test_Membership extends WP_UnitTestCase {
 		$members = Plugin::get_team_members( $this->team_id );
 		$this->assertNotContains( $this->user_id, $members );
 	}
+
+	public function test_team_meta_keys_are_protected() {
+		$keys = array(
+			Plugin::IS_TEAM_META_KEY,
+			Plugin::SLUG_META_KEY,
+			Plugin::GLOBAL_ROLE_META,
+			Plugin::USER_META_KEY,
+		);
+
+		foreach ( $keys as $key ) {
+			$this->assertTrue( is_protected_meta( $key, 'user' ), "{$key} should be protected user meta." );
+		}
+	}
+
+	public function test_user_cannot_edit_own_team_membership_meta() {
+		wp_set_current_user( $this->user_id );
+
+		$this->assertTrue( current_user_can( 'edit_user', $this->user_id ) );
+		$this->assertFalse( current_user_can( 'edit_user_meta', $this->user_id, Plugin::USER_META_KEY ) );
+	}
+
+	public function test_network_admin_can_edit_team_membership_meta() {
+		$admin_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		grant_super_admin( $admin_id );
+		wp_set_current_user( $admin_id );
+
+		$this->assertTrue( current_user_can( 'edit_user_meta', $this->user_id, Plugin::USER_META_KEY ) );
+	}
 }

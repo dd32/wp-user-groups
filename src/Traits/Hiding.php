@@ -61,6 +61,20 @@ trait Hiding {
 		return $allow;
 	}
 
+	public function protect_team_user_meta_keys( $protected, $meta_key, $meta_type ) {
+		if ( '' !== $meta_type && 'user' !== $meta_type ) {
+			return $protected;
+		}
+		return in_array( (string) $meta_key, self::team_user_meta_keys(), true ) ? true : $protected;
+	}
+
+	public function authorize_team_user_meta_access( $allowed, $meta_key, $object_id, $user_id, $cap, $caps ) {
+		if ( ! in_array( (string) $meta_key, self::team_user_meta_keys(), true ) ) {
+			return $allowed;
+		}
+		return user_can( (int) $user_id, 'manage_network_users' );
+  }
+ 
 	/**
 	 * Prevents core's per-site Users screen from removing team accounts
 	 * through the normal "Remove" row/bulk actions. Team site grants are
@@ -83,6 +97,15 @@ trait Hiding {
 
 	public static function is_team_user( $user_id ) {
 		return '1' === (string) get_user_meta( (int) $user_id, self::IS_TEAM_META_KEY, true );
+	}
+
+	private static function team_user_meta_keys() {
+		return array(
+			self::IS_TEAM_META_KEY,
+			self::SLUG_META_KEY,
+			self::GLOBAL_ROLE_META,
+			self::USER_META_KEY,
+		);
 	}
 
 	/**
