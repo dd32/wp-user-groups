@@ -89,6 +89,11 @@ class Test_Capabilities extends WP_UnitTestCase {
 		$this->assertFalse( $user->has_cap( 'edit_others_posts' ) );
 	}
 
+	/**
+	 * Tests that application passwords are unavailable for team accounts.
+	 *
+	 * @return void
+	 */
 	public function test_application_passwords_are_unavailable_for_team_accounts() {
 		add_filter( 'wp_is_application_passwords_available', '__return_true' );
 
@@ -100,6 +105,11 @@ class Test_Capabilities extends WP_UnitTestCase {
 		}
 	}
 
+	/**
+	 * Tests that application password authentication is blocked for team accounts.
+	 *
+	 * @return void
+	 */
 	public function test_application_password_authentication_is_blocked_for_team_accounts() {
 		$error = new WP_Error();
 

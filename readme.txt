@@ -4,7 +4,7 @@ Tags: users, roles, multisite, team, permissions
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.5.1
+Stable tag: 0.5.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,9 +100,11 @@ Please report security issues privately via [GitHub Security Advisories](https:/
 
 == Changelog ==
 
+= 0.5.2 =
+* Security: prevent team accounts from using application passwords, protect internal team user meta, block core per-site team account removal, and enforce editable roles when site admins attach teams.
+
 = 0.5.1 =
 * Security: scope the `pre_user_query` team-member injection to the admin Users screens so a public WP_User_Query (e.g. the REST users collection) can't be broadened by `?team=N`.
 
 = 0.5 =
 * Initial WordPress.org release.
-
