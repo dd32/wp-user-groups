@@ -61,6 +61,23 @@ trait Hiding {
 		return $allow;
 	}
 
+	public function block_team_user_application_password_availability( $available, $user ) {
+		if ( $user instanceof WP_User && self::is_team_user( $user->ID ) ) {
+			return false;
+		}
+		return $available;
+	}
+
+	public function block_team_user_application_password_authentication( $error, $user, $item, $password ) {
+		unset( $item, $password );
+		if ( $user instanceof WP_User && self::is_team_user( $user->ID ) ) {
+			$error->add(
+				'team_user_application_password',
+				__( 'Team accounts cannot use application passwords.', 'user-teams' )
+			);
+		}
+	}
+
 	public function protect_team_user_meta_keys( $protected, $meta_key, $meta_type ) {
 		if ( '' !== $meta_type && 'user' !== $meta_type ) {
 			return $protected;
@@ -73,8 +90,8 @@ trait Hiding {
 			return $allowed;
 		}
 		return user_can( (int) $user_id, 'manage_network_users' );
-  }
- 
+	}
+
 	/**
 	 * Prevents core's per-site Users screen from removing team accounts
 	 * through the normal "Remove" row/bulk actions. Team site grants are
