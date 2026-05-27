@@ -131,6 +131,37 @@ class Test_Admin extends WP_UnitTestCase {
 		$this->assertSame( 'author', $roles[ $blog2 ] ?? null, 'site admin must be able to attach a team to their own site' );
 	}
 
+	public function test_site_admin_cannot_attach_team_with_uneditable_role() {
+
+		$team_id = Plugin::create_team( 'AttachUneditable', 'attach-uneditable', 'editor' );
+		$blog2   = self::factory()->blog->create();
+
+		$site_admin_id = self::factory()->user->create();
+		add_user_to_blog( $blog2, $site_admin_id, 'administrator' );
+		wp_set_current_user( $site_admin_id );
+		switch_to_blog( $blog2 );
+
+		$editable_roles_filter = function ( $roles ) {
+			return array_intersect_key( $roles, array( 'subscriber' => true ) );
+		};
+		add_filter( 'editable_roles', $editable_roles_filter );
+
+		$this->post_form( array(
+			'_wpnonce' => wp_create_nonce( Admin::NONCE_ACTION ),
+			'team_id'  => (string) $team_id,
+			'blog_id'  => (string) $blog2,
+			'role'     => 'editor',
+		) );
+
+		$this->run_handler_expecting_redirect( array( $this->admin, 'handle_attach_team_to_site' ) );
+
+		remove_filter( 'editable_roles', $editable_roles_filter );
+		restore_current_blog();
+		wp_set_current_user( $this->admin_user_id );
+
+		$this->assertSame( array(), Plugin::get_team_site_roles( $team_id ) );
+	}
+
 	public function test_user_without_blog_role_cannot_attach_team() {
 
 		$team_id = Plugin::create_team( 'NoRights', 'no-rights', 'editor' );
