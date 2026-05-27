@@ -88,4 +88,28 @@ class Test_Capabilities extends WP_UnitTestCase {
 		$user = new WP_User( $this->user_id );
 		$this->assertFalse( $user->has_cap( 'edit_others_posts' ) );
 	}
+
+	public function test_application_passwords_are_unavailable_for_team_accounts() {
+		add_filter( 'wp_is_application_passwords_available', '__return_true' );
+
+		$this->assertFalse( wp_is_application_passwords_available_for_user( $this->team_id ) );
+		$this->assertTrue( wp_is_application_passwords_available_for_user( $this->user_id ) );
+
+		remove_filter( 'wp_is_application_passwords_available', '__return_true' );
+	}
+
+	public function test_application_password_authentication_is_blocked_for_team_accounts() {
+		$error = new WP_Error();
+
+		do_action(
+			'wp_authenticate_application_password_errors',
+			$error,
+			new WP_User( $this->team_id ),
+			array(),
+			'password'
+		);
+
+		$this->assertTrue( $error->has_errors() );
+		$this->assertContains( 'team_user_application_password', $error->get_error_codes() );
+	}
 }

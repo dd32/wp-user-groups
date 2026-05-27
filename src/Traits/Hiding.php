@@ -61,6 +61,23 @@ trait Hiding {
 		return $allow;
 	}
 
+	public function block_team_user_application_password_availability( $available, $user ) {
+		if ( $user instanceof WP_User && self::is_team_user( $user->ID ) ) {
+			return false;
+		}
+		return $available;
+	}
+
+	public function block_team_user_application_password_authentication( $error, $user, $item, $password ) {
+		unset( $item, $password );
+		if ( $user instanceof WP_User && self::is_team_user( $user->ID ) ) {
+			$error->add(
+				'team_user_application_password',
+				__( 'Team accounts cannot use application passwords.', 'user-teams' )
+			);
+		}
+	}
+
 	public static function is_team_user( $user_id ) {
 		return '1' === (string) get_user_meta( (int) $user_id, self::IS_TEAM_META_KEY, true );
 	}
