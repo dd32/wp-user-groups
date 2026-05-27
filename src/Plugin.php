@@ -56,6 +56,11 @@ class Plugin {
 		add_filter( 'allow_password_reset', array( $this, 'block_team_user_password_reset' ), 10, 2 );
 		add_filter( 'wp_is_application_passwords_available_for_user', array( $this, 'block_team_user_application_password_availability' ), 10, 2 );
 		add_action( 'wp_authenticate_application_password_errors', array( $this, 'block_team_user_application_password_authentication' ), 10, 4 );
+		add_filter( 'is_protected_meta', array( $this, 'protect_team_user_meta_keys' ), 10, 3 );
+		foreach ( self::team_user_meta_keys() as $meta_key ) {
+			add_filter( "auth_user_meta_{$meta_key}", array( $this, 'authorize_team_user_meta_access' ), 10, 6 );
+		}
+		add_filter( 'map_meta_cap', array( $this, 'block_team_user_core_removal' ), 10, 4 );
 
 		add_filter( 'get_blogs_of_user', array( $this, 'filter_get_blogs_of_user' ), 10, 3 );
 		add_action( 'wp_delete_site', array( $this, 'on_site_deleted' ) );
