@@ -54,6 +54,7 @@ class Plugin {
 		add_filter( 'rest_user_query', array( $this, 'exclude_team_users_from_rest' ) );
 		add_filter( 'authenticate', array( $this, 'block_team_user_login' ), 100, 3 );
 		add_filter( 'allow_password_reset', array( $this, 'block_team_user_password_reset' ), 10, 2 );
+		add_filter( 'map_meta_cap', array( $this, 'block_team_user_core_removal' ), 10, 4 );
 
 		add_filter( 'get_blogs_of_user', array( $this, 'filter_get_blogs_of_user' ), 10, 3 );
 		add_action( 'wp_delete_site', array( $this, 'on_site_deleted' ) );

@@ -173,6 +173,37 @@ class Test_Admin extends WP_UnitTestCase {
 		$this->assertSame( array(), Plugin::get_team_site_roles( $team_id ) );
 	}
 
+	public function test_site_admin_cannot_remove_team_account_through_core_remove_cap() {
+
+		$team_id = Plugin::create_team( 'CoreRemove', 'core-remove', 'editor' );
+		$blog2   = self::factory()->blog->create();
+		Plugin::add_team_to_site( $team_id, $blog2, 'editor' );
+
+		$site_admin_id = self::factory()->user->create();
+		add_user_to_blog( $blog2, $site_admin_id, 'administrator' );
+		wp_set_current_user( $site_admin_id );
+		switch_to_blog( $blog2 );
+
+		$this->assertTrue( current_user_can( 'remove_users' ) );
+		$this->assertFalse( current_user_can( 'remove_user', $team_id ) );
+
+		restore_current_blog();
+		wp_set_current_user( $this->admin_user_id );
+	}
+
+	public function test_super_admin_can_remove_team_account_through_core_remove_cap() {
+
+		$team_id = Plugin::create_team( 'CoreRemoveSuper', 'core-remove-super', 'editor' );
+		$blog2   = self::factory()->blog->create();
+		Plugin::add_team_to_site( $team_id, $blog2, 'editor' );
+
+		switch_to_blog( $blog2 );
+
+		$this->assertTrue( current_user_can( 'remove_user', $team_id ) );
+
+		restore_current_blog();
+	}
+
 	/* ------------------------------------------------------------------
 	 * handle_delete
 	 * ---------------------------------------------------------------- */
