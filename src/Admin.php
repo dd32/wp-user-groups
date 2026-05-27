@@ -771,7 +771,11 @@ class Admin {
 			return;
 		}
 
-		$role_names = wp_roles()->get_names();
+		$editable_roles = $this->get_editable_site_roles( $blog_id );
+		if ( empty( $editable_roles ) ) {
+			return;
+		}
+		$default_role = isset( $editable_roles['subscriber'] ) ? 'subscriber' : (string) key( $editable_roles );
 		?>
 		<div class="user-team-add-team-to-site" data-user-team-relocate-below="form#createuser,form#adduser" style="border-top:1px solid #dcdcde;margin-top:2em;padding-top:1em;">
 			<h2><?php _e( 'Add a Team to This Site', 'user-teams' ); ?></h2>
@@ -798,9 +802,9 @@ class Admin {
 						<th scope="row"><label for="user-team-attach-role"><?php _e( 'Role on this site', 'user-teams' ); ?></label></th>
 						<td>
 							<select name="role" id="user-team-attach-role">
-								<?php foreach ( array_keys( $role_names ) as $slug ) : ?>
-									<option value="<?php echo esc_attr( $slug ); ?>"<?php echo 'subscriber' === $slug ? ' selected' : ''; ?>>
-										<?php echo esc_html( translate_user_role( $role_names[ $slug ] ) ); ?>
+								<?php foreach ( $editable_roles as $slug => $role ) : ?>
+									<option value="<?php echo esc_attr( $slug ); ?>"<?php selected( $default_role, $slug ); ?>>
+										<?php echo esc_html( translate_user_role( $role['name'] ) ); ?>
 									</option>
 								<?php endforeach; ?>
 							</select>
@@ -878,6 +882,11 @@ class Admin {
 		// team to it. Super admins naturally satisfy this everywhere.
 		if ( ! current_user_can_for_site( $blog_id, 'promote_users' ) ) {
 			wp_die( __( 'You do not have permission to manage users on this site.', 'user-teams' ) );
+		}
+
+		if ( '' === $role || ! isset( $this->get_editable_site_roles( $blog_id )[ $role ] ) ) {
+			$this->redirect_to_user_new( 'attach-failed' );
+			return;
 		}
 
 		$team = Plugin::get_team( $team_id );
@@ -1322,6 +1331,27 @@ class Admin {
 			? network_admin_url( 'users.php' )
 			: admin_url( 'users.php' );
 		return add_query_arg( array_merge( array( 'page' => self::PAGE_SLUG ), $args ), $base );
+	}
+
+	private function get_editable_site_roles( $blog_id ) {
+		if ( ! function_exists( 'get_editable_roles' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+		}
+
+		$blog_id  = (int) $blog_id;
+		$switched = false;
+		if ( $blog_id > 0 && get_current_blog_id() !== $blog_id ) {
+			switch_to_blog( $blog_id );
+			$switched = true;
+		}
+
+		$roles = get_editable_roles();
+
+		if ( $switched ) {
+			restore_current_blog();
+		}
+
+		return is_array( $roles ) ? $roles : array();
 	}
 
 	private function redirect_with_notice( $notice, $detail = '' ) {

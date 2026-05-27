@@ -73,6 +73,26 @@ trait Hiding {
 			return $allowed;
 		}
 		return user_can( (int) $user_id, 'manage_network_users' );
+  }
+ 
+	/**
+	 * Prevents core's per-site Users screen from removing team accounts
+	 * through the normal "Remove" row/bulk actions. Team site grants are
+	 * network-managed by the plugin's own nonce + capability checked flow.
+	 */
+	public function block_team_user_core_removal( $caps, $cap, $user_id, $args ) {
+		if ( 'remove_user' !== $cap || empty( $args[0] ) ) {
+			return $caps;
+		}
+
+		$target_user_id = (int) $args[0];
+		if ( $target_user_id <= 0 || ! self::is_team_user( $target_user_id ) ) {
+			return $caps;
+		}
+
+		return user_can( (int) $user_id, 'manage_network_users' )
+			? $caps
+			: array( 'do_not_allow' );
 	}
 
 	public static function is_team_user( $user_id ) {
