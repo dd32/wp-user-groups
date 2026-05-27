@@ -1333,6 +1333,12 @@ class Admin {
 		return add_query_arg( array_merge( array( 'page' => self::PAGE_SLUG ), $args ), $base );
 	}
 
+	/**
+	 * Returns the roles the current user can assign on a site.
+	 *
+	 * @param int $blog_id Site ID whose editable roles should be checked.
+	 * @return array Editable roles keyed by role slug.
+	 */
 	private function get_editable_site_roles( $blog_id ) {
 		if ( ! function_exists( 'get_editable_roles' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/user.php';

@@ -128,6 +128,11 @@ class Test_Membership extends WP_UnitTestCase {
 		$this->assertNotContains( $this->user_id, $members );
 	}
 
+	/**
+	 * Tests that internal team meta keys are protected user meta.
+	 *
+	 * @return void
+	 */
 	public function test_team_meta_keys_are_protected() {
 		$keys = array(
 			Plugin::IS_TEAM_META_KEY,
@@ -141,6 +146,11 @@ class Test_Membership extends WP_UnitTestCase {
 		}
 	}
 
+	/**
+	 * Tests that regular users cannot directly edit their team membership meta.
+	 *
+	 * @return void
+	 */
 	public function test_user_cannot_edit_own_team_membership_meta() {
 		wp_set_current_user( $this->user_id );
 
@@ -148,6 +158,11 @@ class Test_Membership extends WP_UnitTestCase {
 		$this->assertFalse( current_user_can( 'edit_user_meta', $this->user_id, Plugin::USER_META_KEY ) );
 	}
 
+	/**
+	 * Tests that network admins can directly edit team membership meta.
+	 *
+	 * @return void
+	 */
 	public function test_network_admin_can_edit_team_membership_meta() {
 		$admin_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		grant_super_admin( $admin_id );

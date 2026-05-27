@@ -131,6 +131,11 @@ class Test_Admin extends WP_UnitTestCase {
 		$this->assertSame( 'author', $roles[ $blog2 ] ?? null, 'site admin must be able to attach a team to their own site' );
 	}
 
+	/**
+	 * Tests that site admins cannot attach a team with a role they cannot edit.
+	 *
+	 * @return void
+	 */
 	public function test_site_admin_cannot_attach_team_with_uneditable_role() {
 
 		$team_id = Plugin::create_team( 'AttachUneditable', 'attach-uneditable', 'editor' );
@@ -204,6 +209,11 @@ class Test_Admin extends WP_UnitTestCase {
 		$this->assertSame( array(), Plugin::get_team_site_roles( $team_id ) );
 	}
 
+	/**
+	 * Tests that site admins cannot remove team accounts through core row actions.
+	 *
+	 * @return void
+	 */
 	public function test_site_admin_cannot_remove_team_account_through_core_remove_cap() {
 
 		$team_id = Plugin::create_team( 'CoreRemove', 'core-remove', 'editor' );
@@ -222,6 +232,11 @@ class Test_Admin extends WP_UnitTestCase {
 		wp_set_current_user( $this->admin_user_id );
 	}
 
+	/**
+	 * Tests that super admins keep the core remove-user capability for team accounts.
+	 *
+	 * @return void
+	 */
 	public function test_super_admin_can_remove_team_account_through_core_remove_cap() {
 
 		$team_id = Plugin::create_team( 'CoreRemoveSuper', 'core-remove-super', 'editor' );

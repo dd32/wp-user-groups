@@ -61,6 +61,13 @@ trait Hiding {
 		return $allow;
 	}
 
+	/**
+	 * Disables application passwords for team accounts.
+	 *
+	 * @param bool    $available Whether application passwords are available.
+	 * @param WP_User $user      User being checked.
+	 * @return bool Filtered availability.
+	 */
 	public function block_team_user_application_password_availability( $available, $user ) {
 		if ( $user instanceof WP_User && self::is_team_user( $user->ID ) ) {
 			return false;
@@ -68,6 +75,15 @@ trait Hiding {
 		return $available;
 	}
 
+	/**
+	 * Adds an authentication error when a team account uses an application password.
+	 *
+	 * @param WP_Error $error    Error accumulator to modify.
+	 * @param WP_User  $user     User matched by the application password.
+	 * @param array    $item     Application password item.
+	 * @param string   $password Plaintext application password.
+	 * @return void
+	 */
 	public function block_team_user_application_password_authentication( $error, $user, $item, $password ) {
 		unset( $item, $password );
 		if ( $user instanceof WP_User && self::is_team_user( $user->ID ) ) {
@@ -78,6 +94,14 @@ trait Hiding {
 		}
 	}
 
+	/**
+	 * Marks internal team user meta keys as protected user meta.
+	 *
+	 * @param bool   $protected Whether the meta key is already protected.
+	 * @param string $meta_key  Meta key being checked.
+	 * @param string $meta_type Type of object metadata is for.
+	 * @return bool Filtered protected status.
+	 */
 	public function protect_team_user_meta_keys( $protected, $meta_key, $meta_type ) {
 		if ( '' !== $meta_type && 'user' !== $meta_type ) {
 			return $protected;
@@ -85,6 +109,17 @@ trait Hiding {
 		return in_array( (string) $meta_key, self::team_user_meta_keys(), true ) ? true : $protected;
 	}
 
+	/**
+	 * Restricts direct edits to internal team user meta to network user managers.
+	 *
+	 * @param bool   $allowed   Whether access has already been allowed.
+	 * @param string $meta_key  Meta key being authorized.
+	 * @param int    $object_id User ID owning the meta.
+	 * @param int    $user_id   User ID requesting access.
+	 * @param string $cap       Capability being checked.
+	 * @param array  $caps      Primitive capabilities for the request.
+	 * @return bool Filtered access decision.
+	 */
 	public function authorize_team_user_meta_access( $allowed, $meta_key, $object_id, $user_id, $cap, $caps ) {
 		if ( ! in_array( (string) $meta_key, self::team_user_meta_keys(), true ) ) {
 			return $allowed;
@@ -96,6 +131,12 @@ trait Hiding {
 	 * Prevents core's per-site Users screen from removing team accounts
 	 * through the normal "Remove" row/bulk actions. Team site grants are
 	 * network-managed by the plugin's own nonce + capability checked flow.
+	 *
+	 * @param array  $caps    Primitive capabilities required for the meta capability.
+	 * @param string $cap     Meta capability being mapped.
+	 * @param int    $user_id User ID requesting access.
+	 * @param array  $args    Meta capability arguments; first item is the target user ID.
+	 * @return array Filtered primitive capabilities.
 	 */
 	public function block_team_user_core_removal( $caps, $cap, $user_id, $args ) {
 		if ( 'remove_user' !== $cap || empty( $args[0] ) ) {
@@ -116,6 +157,11 @@ trait Hiding {
 		return '1' === (string) get_user_meta( (int) $user_id, self::IS_TEAM_META_KEY, true );
 	}
 
+	/**
+	 * Returns internal team account and team membership meta keys.
+	 *
+	 * @return array Meta keys owned by the plugin.
+	 */
 	private static function team_user_meta_keys() {
 		return array(
 			self::IS_TEAM_META_KEY,
